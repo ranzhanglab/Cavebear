@@ -44,7 +44,7 @@ Where  `time_label` is the name of the column containing the training species ti
 If the best model from cross-species alignment has hyperparameters that differ from the defaults, you must include them as arguments.  
 
 
-### 3. Extract gene probabilites after cross-species alignment
+### 3. (OPTIONAL) Extract gene probabilites after cross-species alignment
 ```
 python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder {optional: arguments for hyperparameters of best model if not default}
 ```
