@@ -27,3 +27,7 @@ LATENT_DIM=$(jq -r '.latent_dim' $BEST_PARAMS)
 DIS=$(jq -r '.dis' $BEST_PARAMS) # this is 0.0 if --dis was not used in the model, include '--dis' and '--discriminator_weight ${DIS}' arguments if used for selected best model
 
 python ${cur_dir}/cavebear_pytorch_cvae.py --input_h5ad ${input_h5ad} --predict predict --learning_rate ${LR} --nlayer ${N_LAYERS} --embed_dim ${LATENT_DIM} --train_species ${train_species} --target_species ${target_species}
+
+
+## 4. (Optional) Extract gene expression values after cross-species alignment (step 1)
+python ${cur_dir}/cavebear_pytorch_cvae.py --input_h5ad ${input_h5ad} --predict px_decoder --learning_rate ${LR} --nlayer ${N_LAYERS} --embed_dim ${LATENT_DIM} --train_species ${train_species} --target_species ${target_species}
