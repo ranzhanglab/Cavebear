@@ -1,0 +1,14 @@
+name: cavebear
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch
+  - pytorch-cuda=12.1
+  - torchaudio
+  - torchvision
+  - conda-forge::anndata
+  - ipykernel
+  - leidenalg
+  - python-igraph
+  - scanpy
