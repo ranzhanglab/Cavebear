@@ -19,6 +19,8 @@ cd ./src/
 bash ./run.sh
 ```
 
+## Input
+
 ## Basic Usage:
 ### 1. Cross-species alignment
 ```
@@ -37,17 +39,33 @@ When predicting pseudotime across experimental systems (i.e. __in vitro_ and _in
 &nbsp;&nbsp;--discriminator_weight {1.0 2.0 5.0 10.0} 
 
 
-### 2. Model selection
-
-### 3. Psuedotime training and prediction
+### 2. Cross-species model selection
 ```
-python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age {optional: arguments for hyperparameters of best model if not default}
+python ./src/get_best_params.py --log /path/to/LISI_log.txt
 ```
-Where  `time_label` is the name of the column containing the training species time data (ie mouse age when cells were collected).  
-If the best model from cross-species alignment has hyperparameters that differ from the defaults, you must include them as arguments.  
+This creates a 'best_params.json' file in the same folder which can be used to set the arguments for pseudotime training and prediction.
 
 
-### 3. (OPTIONAL) Extract gene probabilites after cross-species alignment
+### 3. Psuedotime training on reference cells and prediction on target cells
 ```
-python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder {optional: arguments for hyperparameters of best model if not default}
+python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age
 ```
+Where  `time_label` is the name of the column containing the training species time data (ie mouse age when cells were collected).
+
+Output:
+A .txt file with the model name and best hyperparameters for both trainings is created for the target cells by saving the adata.obs where the last column is called "pred_time" and contains the predicted pseudotime.
+```
+sampleID        age  batch  genotype  major_trajectory  origin  species  pred_time
+GAP13.48.P9_G1	48.0000  0  XX      retinal neuron    Trapnell	zebrafish	  14.4456
+GAP13.48.P9_C4	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.2055
+GAP13.48.P9_F8	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.5047
+GAP13.48.P9_H3	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  14.3614
+```
+
+
+### 4. (OPTIONAL) Extract updated gene values after cross-species alignment
+```
+python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder 
+```
+Use best parameters from best_params.json to ensure correct model is used.
+Output is a numpy array, metadata (.tsv) and gene names (.txt).
