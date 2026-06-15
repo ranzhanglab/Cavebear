@@ -23,12 +23,12 @@ from scipy import sparse
 import pandas as pd
 from pathlib import Path
 import sys
-import os, time, argparse, json
-from datetime import date
+import os,  argparse, json
 from sklearn.neighbors import NearestNeighbors
 import random
 import math
 import matplotlib.pyplot as plt
+import json
 
 # ---------- Utilities ----------
 def ensure_sparse_csr(X):
@@ -734,6 +734,27 @@ def extract_px_decoder(model, adata, batch_col, species_col,
     print(f"Saved:\n  {npy_path}\n  {meta_path}\n  {gene_path}")
     return px_arr
 
+# ---------- parse hyperparameter string for LISI_log file ----------
+def parse_hyperparameters(hyperparam_str):
+    parts = hyperparam_str.split("_")
+
+    parsed = {
+        "lr": float(parts[0]),
+        "n_layers": int(parts[1]),
+        "latent_dim": int(parts[2]),
+        "dis": 0.0,  # default if not present
+    }
+
+    remaining = parts[3:]
+    for part in remaining:
+        if part.startswith("dis"):
+            weight_str = part[3:]
+            parsed["dis"] = float(weight_str) if weight_str else 0.0
+        else:
+            parsed["target_time"] = part
+
+    return parsed
+
 
 # ---------- Main ----------
 def main(args):
@@ -768,12 +789,16 @@ def main(args):
     species_col = "species"
 
     # ── model name ────────────────────────────────────────────────────────
-    hyperparameters = f"{str(lr)}_{str(n_layers)}_{str(latent_dim)}"
-    model_name = f"cvae_pytorch_disc_best_model_{target_time}_{str(lr)}_{str(n_layers)}_{str(latent_dim)}_{str(input_name)}"
-    if dis:
-        model_name += "_dis"
+    hyperparameters = f"{str(lr)}_{str(n_layers)}_{str(latent_dim)}" # main hyperparameter settings
+    if dis: # add discriminator to hyperparameters if it is used
+        hyperparameters += "_dis"
         if discriminator_weight != 0.0:
-            model_name += f"{discriminator_weight}"   # e.g. _dis2.0
+            hyperparameters += f"{discriminator_weight}"   # e.g. _dis2.0
+    if target_time != '': # add target_time to hyperparameters if it is specified
+        hyperparamters += f"_{target_time}"
+
+    model_name = f"cvae_pytorch_disc_best_model_{str(input_name)}_{hyperparameters}"
+
     if target_species=='human': 
         model_name = str(model_name) + "_human"
     if batch_col!='batch':
@@ -784,21 +809,23 @@ def main(args):
     results_dir = Path.cwd().parent / "results"
     results_dir.mkdir(parents=True, exist_ok=True) # make the results folder if it doesn't already exist
 
-    if len(list(Path(f"{results_dir}/{input_name}/{hyperparameters}/").glob(f"*/{model_file}"))) == 0:
-        today = date.today()
-        outdir = Path(f"{str(results_dir)}/{input_name}/{hyperparameters}/{str(today)}")
+    # Check if the model already exists and if it does not, create the folder, else set outdir to the folder it exists in
+    model_path = Path(f"{results_dir}/{input_name}/{hyperparameters}/")
+    matches = list(model_path.glob(model_file))
+    if len(matches) == 0:
+        outdir = model_path
         os.makedirs(outdir, exist_ok=True)
-        print("The model could not be found, training will be run and placed in a folder for today.")
-        print(f'Output Folder: {str(outdir)}')
-    else: 
-        outdir = next(Path(f"{results_dir}/{input_name}/{hyperparameters}/").glob(f"*/{model_file}")).parent
-
+        print("The model could not be found, training will be run.")
+        print(f"Output Folder: {str(outdir)}")
+    else:
+        outdir = matches[0].parent
         print("The model was found in folder: " + str(outdir))
 
     ## check whether GPU is used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
+    # Load the data and filter/ add obs labels as determined by arguments
     print("Loading AnnData:", input_h5ad)
     adata = anndata.read_h5ad(input_h5ad)
     print("AnnData was loaded!")
@@ -821,7 +848,7 @@ def main(args):
                       (adata.obs.time_label == float(target_time))]
     print(f'adata shape: {adata.shape}')
 
-    embeddings_path = str(outdir) + "/" + model_name + "_cell_embeddings.npy"
+    embeddings_path = str(outdir) + "/" + model_name + "_cell_embeddings.npy" # set the cell embeddings file name
 
     if not Path(embeddings_path).exists():
         print(f"Training and/or evaluation of {model_name} is being performed!")
@@ -928,22 +955,34 @@ def main(args):
         fig.savefig(f"{outdir}/umaps/umap_{str(model_name)}_species_sep.pdf", dpi=300, bbox_inches='tight', transparent=True)
 
     # ── LISI ──────────────────────────────────────────────────────────────
-    lisi_path = str(outdir) + "/" + str(model_name) + "_lisi.txt"
-    if Path(lisi_path).exists():
-        print(f'Skipping LISI Calculation. {model_name}_lisi.txt already exists.')
+    print("Computing LISI")
+    idx        = data_val.indices
+    val_subset = adata[idx].copy()
+    X_val      = np.asarray(val_subset.obsm["X_cvae"])
+    # Standardize each dimension of embedding
+    X_val      = (X_val - X_val.mean(axis=0)) / (X_val.std(axis=0))
+    val_lisi   = compute_lisi(X_val, val_subset.obs.species.tolist(), perplexity=30)
+    
+    # Add LISI score for hyperparameter settings to the log
+    parsed_params = parse_hyperparameters(hyperparameters)
+    new_row = pd.DataFrame([{**parsed_params, "lisi_score": val_lisi}])
+    lisi_log = Path(outdir).parent / f"LISI_log.txt"
+    if os.path.exists(lisi_log):
+        existing_df = pd.read_csv(lisi_log)
+        hyperparam_cols = [col for col in existing_df.columns if col != "lisi_score"]
+        
+        duplicate_mask = (existing_df[hyperparam_cols] == new_row[hyperparam_cols].values).all(axis=1)
+        
+        if duplicate_mask.any():
+            existing_df.loc[duplicate_mask, "lisi_score"] = val_lisi
+            existing_df.to_csv(lisi_log, mode="w", header=True, index=False)
+            print(f"Updated existing entry in {lisi_log}")
+        else:
+            new_row.to_csv(lisi_log, mode="a", header=False, index=False)
+            print(f"Appended new entry to {lisi_log}")
     else:
-        print("Computing LISI")
-        idx        = data_val.indices
-        val_subset = adata[idx].copy()
-        X_val      = np.asarray(val_subset.obsm["X_cvae"])
-        # Standardize each dimension of embedding
-        X_val      = (X_val - X_val.mean(axis=0)) / (X_val.std(axis=0))
-        start      = time.time()
-        val_lisi   = compute_lisi(X_val, val_subset.obs.species.tolist(), perplexity=30)
-        with open(str(outdir) + "/" + model_name + "_lisi.txt", 'w') as fp:
-            fp.write(str(val_lisi))
-        print("  Saved *_lisi.txt")
-        print(f'Time to compute LISI Score: {time.time() - start:.1f}s')
+        new_row.to_csv(lisi_log, mode="w", header=True, index=False)
+        print(f"Created new log at {lisi_log}")
 
     # ── Time-supervised training ───────────────────────────────────────────
     if predict == 'time':
