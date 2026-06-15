@@ -1,6 +1,10 @@
 # Cross-species pseudotime prediction
 
-### Overview: Cavebear utilizes a pytorch framework with two-steps to predict pseudotime of a sample using a well defined reference of a different species or experimental system (ie _in vivo_ vs _in vitro_).  
+### Overview: Cavebear utilizes a pytorch framework with three-steps to predict pseudotime of a sample using a well defined reference of a different species or experimental system (ie _in vivo_ vs _in vitro_).  
+<img width="2210" height="772" alt="Cavebear_overview_github" src="https://github.com/user-attachments/assets/05f8c333-06b7-4750-98eb-853acab1667d" />  
+
+#### Concept: Cavebear utilizes a well defined reference scRNA-seq dataset to predict the pseudotime of a target scRNA-seq dataset that has incomplete or inaccurate time-labels.  
+#### Method: Cavebear aligns species or experimental conditions (step 1) and uses the learned cell embeddings of the reference cells to train the time predictor (step 2). The trained time predictor is subsequently applied to the learned cell embeddings of the target species or condition from step 1 to predict the pseudotime of the target cells (step 3). 
 
 ## Installation:
 Install through conda:
