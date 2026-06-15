@@ -19,7 +19,8 @@ cd ./src/
 bash ./run.sh
 ```
 
-## Input
+## Input/ Preprocessing
+NEED TO UPDATE
 
 ## Basic Usage:
 ### 1. Cross-species alignment
