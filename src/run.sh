@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Arguments that can be included for 
+# --- Arguments (input, training_species, and target_species are required) ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --input | -i) input=$2; shift 2 ;;
@@ -9,7 +9,7 @@ while [[ $# -gt 0 ]]; do
         --nlayer | -l) nlayer=$2; shift 2 ;;
         --ndim | -d) ndim=$2; shift 2 ;;
         --help   | -h)
-            echo "Usage: $0 --step STEP --input FILE --training_species STR --target_species STR [--nlayer INT --ndim INT]"
+            echo "Usage: $0 --input FILE --training_species STR --target_species STR [--nlayer INT --ndim INT]"
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
@@ -43,7 +43,7 @@ if [[ "$error" == true ]]; then
 fi
 
 
-# Set directory and get sample basename
+## --- Set directory and get sample basename ----------------------------------------------------------
 cur_dir=$(pwd)
 name="${$(basename "$input")%.*}"
 
