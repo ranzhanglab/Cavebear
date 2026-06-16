@@ -10,22 +10,25 @@ Method: Cavebear aligns species or experimental systems (step 1) and uses the le
 Install through conda:
 ```
 conda env create -f environment.yml
-conda activate
+conda activate cavebear
 ```
 
 ## Example Run:
 ```
 cd ./src/
-bash ./run.sh
+bash ./run.sh {cs_align, select_model, predict, extract}
 ```
+
+## Input/ Preprocessing
+Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gene matrix from a reference dataset and a target dataset. The h5ad file will be read in as an anndata and the metadata will be located in adata.obs as a pandas dataframe. Metadata to include are at minimum 'species', 'batch', and 'age' or 'time', with optional additional metadata including 'cell_type' and 'sex' or 'genotype'.
 
 ## Basic Usage:
 ### 1. Cross-species alignment
 ```
-python ./src/cavebear_pytorch_cvae.py --input_h5ad {path/to/input_file.h5ad} --predict train
+python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict train
 ```
 example input file: ./data/example.h5ad
-For hyperparameter tuning, recommend tuning the learning_rate (--learining-rate {0.01 0.001 0.0001}). Other potential hyperparameters to test are nlayers, embed_dim.  
+For hyperparameter tuning, recommend tuning the learning_rate (--learining-rate {0.01 0.001 0.0001}). Other potential hyperparameters to test are nlayers and embed_dim.  
 > Defaults:  
 &nbsp;&nbsp;--learning_rate 0.001  
 &nbsp;&nbsp;--nlayers 3  
@@ -37,17 +40,41 @@ When predicting pseudotime across experimental systems (i.e. __in vitro_ and _in
 &nbsp;&nbsp;--discriminator_weight {1.0 2.0 5.0 10.0} 
 
 
-### 2. Model selection
+### 2. Cross-species model selection
+Run 'get_best_params.py' with the path to the LISI_log.txt to select the model with optimal hyperparameter settings.
+This creates a 'best_params.json' file in the same folder which can be used to set the arguments for pseudotime training and prediction.
 
-### 3. Psuedotime training and prediction
+To run this step using ./run.sh, run with the following arguments (This will also automatically run the pseudotime prediction step):
 ```
-python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age {optional: arguments for hyperparameters of best model if not default}
+bash ./run.sh select_model --file /path/to/LISI_log.txt
 ```
-Where  `time_label` is the name of the column containing the training species time data (ie mouse age when cells were collected).  
-If the best model from cross-species alignment has hyperparameters that differ from the defaults, you must include them as arguments.  
+To run this step alone without prediction:
+```
+python ./src/get_best_params.py --log /path/to/LISI_log.txt
+```
 
 
-### 3. (OPTIONAL) Extract gene probabilites after cross-species alignment
+### 3. Psuedotime training on reference cells and prediction on target cells
+Pseudotime training and prediction when run with the 'best_params.json' produced in step 2
 ```
-python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder {optional: arguments for hyperparameters of best model if not default}
+python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age
 ```
+Where  `time_label` is the name of the column containing the training species time data (ie mouse age when cells were collected).
+
+Output:
+A .txt file with the model name and best hyperparameters for both trainings is created for the target cells by saving the adata.obs where the last column is called "pred_time" and contains the predicted pseudotime.
+```
+sampleID        age  batch  genotype  major_trajectory  origin  species  pred_time
+GAP13.48.P9_G1	48.0000  0  XX      retinal neuron    Trapnell	zebrafish	  14.4456
+GAP13.48.P9_C4	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.2055
+GAP13.48.P9_F8	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.5047
+GAP13.48.P9_H3	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  14.3614
+```
+
+
+### 4. (OPTIONAL) Extract updated gene values after cross-species alignment
+```
+python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder 
+```
+Use best parameters from best_params.json to ensure correct model is used.
+Output is a numpy array, metadata (.tsv) and gene names (.txt).
