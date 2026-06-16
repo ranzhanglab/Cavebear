@@ -10,7 +10,7 @@ Method: Cavebear aligns species or experimental systems (step 1) and uses the le
 Install through conda:
 ```
 conda env create -f environment.yml
-conda activate
+conda activate cavebear
 ```
 
 ## Example Run:
