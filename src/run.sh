@@ -8,8 +8,9 @@ while [[ $# -gt 0 ]]; do
         --target_species | -y) ndim=$2; shift 2 ;;
         --nlayer | -l) nlayer=$2; shift 2 ;;
         --ndim | -d) ndim=$2; shift 2 ;;
+        --extract | -e) extract=$2; shift 2 ;;
         --help   | -h)
-            echo "Usage: $0 --input FILE --training_species STR --target_species STR [--nlayer INT --ndim INT]"
+            echo "Usage: $0 --input FILE --training_species STR --target_species STR [--nlayer INT --ndim INT --extract {true or false}]"
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
@@ -18,6 +19,7 @@ done
 # --- Defaults (applied only if flag was not provided) ---
 nlayer=${nlayer:-3}
 ndim=${ndim:-25}
+extract=${ndim:-false}
 
 # --- Validate arguments ---
 error=false
@@ -71,4 +73,6 @@ python ${cur_dir}/cavebear_pytorch_cvae.py --input_h5ad ${input} --predict predi
 
 
 ## --- 4. (Optional) Extract gene expression values after cross-species alignment (step 1) ----------------------------------------------------------
-python ${cur_dir}/cavebear_pytorch_cvae.py --input_h5ad ${input} --predict px_decoder --learning_rate ${LR} --nlayer ${N_LAYERS} --embed_dim ${LATENT_DIM} --train_species ${train_species} --target_species ${target_species}
+if [[ "$extract" == true ]]; then
+    python ${cur_dir}/cavebear_pytorch_cvae.py --input_h5ad ${input} --predict px_decoder --learning_rate ${LR} --nlayer ${N_LAYERS} --embed_dim ${LATENT_DIM} --train_species ${train_species} --target_species ${target_species}
+fi
