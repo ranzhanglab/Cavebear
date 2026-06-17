@@ -16,7 +16,7 @@ conda activate cavebear
 ## Example Run:
 ```
 cd ./src/
-bash ./run.sh {cs_align, select_model, predict, extract}
+bash ./run.sh --input {input.h5ad} --training_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
 ```
 
 ## Input/ Preprocessing
@@ -43,19 +43,12 @@ When predicting pseudotime across experimental systems (i.e. __in vitro_ and _in
 ### 2. Cross-species model selection
 Run 'get_best_params.py' with the path to the LISI_log.txt to select the model with optimal hyperparameter settings.
 This creates a 'best_params.json' file in the same folder which can be used to set the arguments for pseudotime training and prediction.
-
-To run this step using ./run.sh, run with the following arguments (This will also automatically run the pseudotime prediction step):
-```
-bash ./run.sh select_model --file /path/to/LISI_log.txt
-```
-To run this step alone without prediction:
 ```
 python ./src/get_best_params.py --log /path/to/LISI_log.txt
 ```
 
 
 ### 3. Psuedotime training on reference cells and prediction on target cells
-Pseudotime training and prediction when run with the 'best_params.json' produced in step 2
 ```
 python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age
 ```
