@@ -26,7 +26,6 @@ Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gen
 ```
 python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict train
 ```
-example input file: ./data/example.h5ad  
 For hyperparameter tuning, we recommend tuning the learning_rate (--learining-rate {0.01 0.001 0.0001}).  Other potential hyperparameters to test are nlayers and embed_dim.  
 > Defaults:  
 &nbsp;&nbsp;--learning_rate 0.001  
