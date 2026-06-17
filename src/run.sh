@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# --- Arguments (input, training_species, and target_species are required) ---
+# --- Arguments (input, train_species, and target_species are required) ---
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --input | -i) input=$2; shift 2 ;;
-        --training_species | -x) ndim=$2; shift 2 ;;
-        --target_species | -y) ndim=$2; shift 2 ;;
+        --train_species | -x) train_species=$2; shift 2 ;;
+        --target_species | -y) target_species=$2; shift 2 ;;
         --nlayer | -l) nlayer=$2; shift 2 ;;
         --ndim | -d) ndim=$2; shift 2 ;;
         --extract | -e) extract=$2; shift 2 ;;
         --help   | -h)
-            echo "Usage: $0 --input FILE --training_species STR --target_species STR [--nlayer INT --ndim INT --extract {true or false}]"
+            echo "Usage: $0 --input FILE --train_species STR --target_species STR [--nlayer INT --ndim INT --extract {true or false}]"
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
@@ -29,7 +29,7 @@ if [[ -z "$input" ]]; then
     error=true
 fi
 
-if [[ -z "$training_species" ]]; then
+if [[ -z "$train_species" ]]; then
     echo "Error: --training_species is required"
     error=true
 fi
@@ -40,14 +40,15 @@ if [[ -z "$target_species" ]]; then
 fi
 
 if [[ "$error" == true ]]; then
-    echo "Usage: $0 --step STEP --input FILE --training_species STR --target_species STR [--learning_rate FLOAT --nlayer INT --ndim INT]"
+    echo "Usage: $0 --input FILE --train_species STR --target_species STR [--learning_rate FLOAT --nlayer INT --ndim INT]"
     exit 1
 fi
 
 
 ## --- Set directory and get sample basename ----------------------------------------------------------
-cur_dir=$(pwd)
-name="${$(basename "$input")%.*}"
+cur_dir=$(pwd)/src
+input_base=$(basename "$input")
+name="${input_base%.*}"
 
 
 
