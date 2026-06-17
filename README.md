@@ -27,8 +27,8 @@ Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gen
 ```
 python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict train
 ```
-example input file: ./data/example.h5ad
-For hyperparameter tuning, recommend tuning the learning_rate (--learining-rate {0.01 0.001 0.0001}). Other potential hyperparameters to test are nlayers and embed_dim.  
+example input file: ./data/example.h5ad  
+For hyperparameter tuning, we recommend tuning the learning_rate (--learining-rate {0.01 0.001 0.0001}).  Other potential hyperparameters to test are nlayers and embed_dim.  
 > Defaults:  
 &nbsp;&nbsp;--learning_rate 0.001  
 &nbsp;&nbsp;--nlayers 3  
@@ -49,6 +49,7 @@ python ./src/get_best_params.py --log /path/to/LISI_log.txt
 
 
 ### 3. Psuedotime training on reference cells and prediction on target cells
+Use the 'best_params.json' file to get pseudotime prediction.
 ```
 python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age
 ```
@@ -69,5 +70,5 @@ GAP13.48.P9_H3	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  14.361
 ```
 python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder 
 ```
-Use best parameters from best_params.json to ensure correct model is used.
-Output is a numpy array, metadata (.tsv) and gene names (.txt).
+Use best parameters from 'best_params.json' to ensure correct model is used.
+Outputs are a species-agnostic gene expression numpy array, a metadata file (.tsv), and gene names (.txt).
