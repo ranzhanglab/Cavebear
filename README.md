@@ -15,8 +15,7 @@ conda activate cavebear
 
 ## Example Run:
 ```
-cd ./src/
-bash ./run.sh --input {input.h5ad} --training_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
+bash ./src/run.sh --input {input.h5ad} --train_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
 ```
 
 ## Input/ Preprocessing
