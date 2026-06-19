@@ -1,10 +1,17 @@
-# Cross-species pseudotime prediction
+# Cavebear: reference-guided pseudotime inference across species and biological contexts
 
 <img width="2210" height="772" alt="Cavebear_overview_github" src="https://github.com/user-attachments/assets/05f8c333-06b7-4750-98eb-853acab1667d" />  
 
-Concept: Cavebear utilizes an accurately labled, densley colleceted scRNA-seq reference dataset to predict the pseudotime of a target scRNA-seq dataset that has incomplete or inaccurate time-labels. The reference and target datasets can be from different species and/or experimental systems (i.e. _in vivo_ and _in vitro_).
+Overview: Cavebear is a reference-guided framework for predicting cellular pseudotime in undercharacterized datasets using time-series single-cell RNA-seq references from well-characterized systems.
+
+Cavebear enables pseudotime inference across:
+
+- species (e.g. mouse → human),
+- experimental systems (e.g. _in vivo_ → _in vitro_),
+- biological conditions (e.g. normal tissue → disease).
 
 Method: Cavebear aligns species or experimental systems (step 1) and uses the learned cell embeddings of the reference cells to train the time predictor (step 2). The trained time predictor is subsequently applied to the learned cell embeddings of the target species or system from step 1 to predict the pseudotime of the target cells (step 3). 
+
 
 ## Installation:
 Install through conda:
@@ -13,13 +20,29 @@ conda env create -f environment.yml
 conda activate cavebear
 ```
 
+## Input Data:
+Cavebear requires a `.h5ad` file containing both reference and target datasets. Genes should be matched across datasets using ortholog mapping for cross-species applications or gene name matching for datasets from the same species.
+
+Metadata should be stored in `adata.obs`.
+
+### Required columns
+
+| Column | Description |
+|----------|------------|
+| `species` | Labels identifying the reference and target datasets. These can correspond to different species, experimental systems, biological conditions, or datasets. |
+| `batch` | Batch information. |
+| `time` | Collection time of cells (e.g. developmental age, chronological age, or sampling time), only time labels in the reference data is used during training |
+
+### Optional columns
+
+- `cell_type` | this is not used in model training and may only be used in downstream evaluation/plotting
+
+
 ## Example Run:
 ```
 bash ./src/run.sh --input {input.h5ad} --train_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
 ```
 
-## Input/ Preprocessing
-Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gene matrix from a reference dataset and a target dataset. The h5ad file will be read in as an anndata and the metadata will be located in adata.obs as a pandas dataframe. Metadata to include are at minimum 'species', 'batch', and 'age' or 'time', with optional additional metadata including 'cell_type', 'sex', and 'genotype'.
 
 ## Basic Usage:
 ### 1. Cross-species alignment
@@ -32,7 +55,7 @@ For hyperparameter tuning, we recommend tuning the learning_rate (--learining-ra
 &nbsp;&nbsp;--nlayers 3  
 &nbsp;&nbsp;--embed_dim 25  
 
-When predicting pseudotime across experimental systems (i.e. __in vitro_ and _in vivo_), include the discriminator argument and tune the discriminator weight.
+When predicting pseudotime across experimental systems (e.g. _in vitro_ and _in vivo_), you may include the discriminator:
 > Arguments to include for discriminator:  
 &nbsp;&nbsp;--dis dis   
 &nbsp;&nbsp;--discriminator_weight {1.0 2.0 5.0 10.0} 
@@ -62,11 +85,3 @@ GAP13.48.P9_C4	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.205
 GAP13.48.P9_F8	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  16.5047
 GAP13.48.P9_H3	48.0000  0  XX      hatching gland    Trapnell	zebrafish	  14.3614
 ```
-
-
-### 4. (OPTIONAL) Extract updated gene values after cross-species alignment
-```
-python /src/cavebear_pytorch_cvae.py --input_h5ad /data/example.h5ad --predict px_decoder 
-```
-Use best parameters from 'best_params.json' to ensure correct model is used.
-Outputs are a species-agnostic gene expression numpy array, a metadata file (.tsv), and gene names (.txt).
