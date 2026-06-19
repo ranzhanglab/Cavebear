@@ -14,6 +14,10 @@ def get_best_params(lisi_log_path):
     results_df = pd.read_csv(lisi_log_path)
     best_row = results_df.loc[results_df["lisi_score"].idxmax()]
     best_params = best_row.drop("lisi_score").to_dict()
+    
+    # Convert whole-number params from float to int
+    best_params["n_layers"] = int(best_params["n_layers"])
+    best_params["latent_dim"] = int(best_params["latent_dim"])
 
     best_params_path = output_dir / "best_params.json"
     with open(best_params_path, "w") as f:
@@ -29,5 +33,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Extract best hyperparameters from LISI log")
     parser.add_argument("--log", type=str, required=True, help="Path to LISI log CSV")
     args = parser.parse_args()
+    print(f'log file: {args.log}')
 
     get_best_params(args.log)

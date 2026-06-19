@@ -19,7 +19,7 @@ bash ./src/run.sh --input {input.h5ad} --train_species {species1} --target_speci
 ```
 
 ## Input/ Preprocessing
-Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gene matrix from a reference dataset and a target dataset. The h5ad file will be read in as an anndata and the metadata will be located in adata.obs as a pandas dataframe. Metadata to include are at minimum 'species', 'batch', and 'age' or 'time', with optional additional metadata including 'cell_type', 'sex', and 'genotype'.
+Required input is a scRNA-seq (*.h5ad format) containing a combined sample X gene matrix from a reference dataset and a target dataset. The h5ad file will be read in as an anndata and the metadata will be located in adata.obs as a pandas dataframe. Metadata to include are at minimum 'species', 'batch', and 'age', with optional additional metadata including 'cell_type', 'sex', and 'genotype'.
 
 ## Basic Usage:
 ### 1. Cross-species alignment

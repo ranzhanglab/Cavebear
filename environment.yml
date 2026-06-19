@@ -3,6 +3,7 @@ channels:
   - pytorch
   - nvidia
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
   - python=3.10
@@ -15,3 +16,13 @@ dependencies:
   - leidenalg
   - python-igraph
   - scanpy
+   # R and R packages
+  - r-base
+  - r-data.table
+  - r-ggplot2
+  - r-stringr
+  - r-vgam
+  - r-rmisc
+  - r-dplyr
+  - r-optparse
+  - cairo

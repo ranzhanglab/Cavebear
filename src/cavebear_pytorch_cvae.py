@@ -653,87 +653,6 @@ def predict_time_from_saved(time_model_outdir, adata_target, train_species, devi
     predictor.restore(str(time_model_outdir / 'best_model'), load_optimizer=False)
     return predictor.predict_time(adata_target.obsm["X_cvae"])
 
-# ---------- px_decoder extraction ----------
-def extract_px_decoder(model, adata, batch_col, species_col,
-                        select_species, select_celltypes, celltype_col,
-                        outdir, model_name, batch_size, device):
-    """
-    Extract px_decoder (softmax gene probabilities) for selected
-    species/cell types using an already-loaded CVAE model.
-    Saves .npy + metadata .tsv + gene names .txt
-    """
-    # ── filter cells ──────────────────────────────────────────────────────
-    mask = np.ones(adata.n_obs, dtype=bool)
-    if select_species:
-        mask &= adata.obs[species_col].isin(select_species).values
-    if select_celltypes:
-        mask &= adata.obs[celltype_col].isin(select_celltypes).values
-
-    adata_sub = adata[mask].copy()
-    print(f"px_decoder: {adata_sub.n_obs} cells selected "
-          f"(species={select_species}, cell_types={select_celltypes})")
-    if adata_sub.n_obs == 0:
-        raise ValueError("No cells matched the specified filters.")
-
-    # ── rebuild cond_matrix using full adata category sets ────────────────
-    species_cats = np.unique(adata.obs[species_col].astype(str).values)
-    batch_cats   = np.unique(adata.obs[batch_col].astype(str).values)
-
-    s_idx = np.searchsorted(species_cats, adata_sub.obs[species_col].astype(str).values)
-    b_idx = np.searchsorted(batch_cats,   adata_sub.obs[batch_col].astype(str).values)
-    cond_matrix = np.concatenate(
-        [np.eye(len(species_cats))[s_idx],
-         np.eye(len(batch_cats))[b_idx]], axis=1
-    ).astype(np.float32)
-
-    libsize = np.asarray(adata_sub.X.sum(axis=1)).squeeze().astype(np.float32)
-    libsize[libsize == 0] = 1.0
-
-    dataset_sub = AnnDataset(adata_sub, cond_matrix, libsize, species_idx=None)
-    loader = DataLoader(dataset_sub, batch_size=batch_size,
-                        shuffle=False, collate_fn=collate_dense)
-
-    # ── extract ───────────────────────────────────────────────────────────
-    model.eval()
-    all_px = []
-    with torch.no_grad():
-        for batch in loader:
-            x    = batch["x"].to(device).float()
-            cond = batch["cond"].to(device).float()
-            sf   = batch["sf"].to(device).float()
-
-            x_enc = torch.log1p(x)
-            q_mu, q_logvar = model.encoder(x_enc, cond)
-            z = model.reparam(q_mu, q_logvar)
-            px_decoder, _, _ = model.decoder(z, cond)
-            all_px.append(px_decoder.cpu().numpy())
-
-    px_arr = np.vstack(all_px).astype(np.float32)
-    print(f"px_decoder shape: {px_arr.shape}")
-
-    # ── save ──────────────────────────────────────────────────────────────
-    tag = ""
-    if select_species:
-        tag += "_" + "-".join(sorted(select_species))
-    if select_celltypes:
-        tag += "_" + "-".join(sorted(select_celltypes))
-
-    npy_path  = f"{outdir}/{model_name}{tag}_px_decoder.npy"
-    meta_path = f"{outdir}/{model_name}{tag}_px_decoder_meta.tsv"
-    gene_path = f"{outdir}/{model_name}{tag}_px_decoder_genes.txt"
-
-    np.save(npy_path, px_arr)
-
-    cols = [c for c in [species_col, batch_col, celltype_col]
-            if c in adata_sub.obs.columns]
-    adata_sub.obs[cols].to_csv(meta_path, sep='\t')
-
-    with open(gene_path, 'w') as f:
-        f.write('\n'.join(adata_sub.var_names.tolist()))
-
-    print(f"Saved:\n  {npy_path}\n  {meta_path}\n  {gene_path}")
-    return px_arr
-
 # ---------- parse hyperparameter string for LISI_log file ----------
 def parse_hyperparameters(hyperparam_str):
     parts = hyperparam_str.split("_")
@@ -823,7 +742,6 @@ def main(args):
 
     ## check whether GPU is used
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
 
     # Load the data and filter/ add obs labels as determined by arguments
     print("Loading AnnData:", input_h5ad)
@@ -841,7 +759,6 @@ def main(args):
     adata.obs = adata.obs.copy()
     adata.obs['group'] = adata.obs[group] if (group != '' and group in adata.obs.columns) else ''
     adata.obs['time_label'] = adata.obs[time_label] if (time_label != '' and time_label in adata.obs.columns) else ''
-    print(f'the time label is: {time_label}')
 
     if target_time != '':
         adata = adata[(adata.obs.species != target_species) |
@@ -850,139 +767,141 @@ def main(args):
 
     embeddings_path = str(outdir) + "/" + model_name + "_cell_embeddings.npy" # set the cell embeddings file name
 
-    if not Path(embeddings_path).exists():
-        print(f"Training and/or evaluation of {model_name} is being performed!")
+    if predict == 'train':
+        if not Path(embeddings_path).exists():
+            print(f"Training and/or evaluation of {model_name} is being performed!")
 
-        dataset, species_cats, _, cond_dim = build_dataset(
-            adata, species_col, batch_col, dis)
+            dataset, species_cats, _, cond_dim = build_dataset(
+                adata, species_col, batch_col, dis)
 
-        n_cells, n_genes = adata.X.shape
-        n_species = len(species_cats) if dis else 0
-        print(f"Cells: {n_cells}, Genes: {n_genes}, Cond dim: {cond_dim}")
-        print(f"Species: {species_cats} -> n_species for discriminator: {n_species}")
+            n_cells, n_genes = adata.X.shape
+            n_species = len(species_cats) if dis else 0
+            print(f"Cells: {n_cells}, Genes: {n_genes}, Cond dim: {cond_dim}")
+            print(f"Species: {species_cats} -> n_species for discriminator: {n_species}")
 
-        train_loader, val_loader, data_val, train_size = setTrainingSets(dataset, batch_size)
+            train_loader, val_loader, data_val, train_size = setTrainingSets(dataset, batch_size)
 
-        if Path(str(outdir) + '/' + model_file).exists():
-            print("The model already exists. Skipping training!")
-            model = CVAE(n_genes, cond_dim, hidden_size, latent_dim, n_layers,
-                         n_species=n_species,
-                         discriminator_weight=discriminator_weight).to(device).float()
+            if Path(str(outdir) + '/' + model_file).exists():
+                print("The model already exists. Skipping training!")
+                model = CVAE(n_genes, cond_dim, hidden_size, latent_dim, n_layers,
+                            n_species=n_species,
+                            discriminator_weight=discriminator_weight).to(device).float()
+            else:
+                print("The model does not exist. Training is being performed!")
+                model = CVAE(n_genes, cond_dim, hidden_size, latent_dim, n_layers,
+                            n_species=n_species,
+                            discriminator_weight=discriminator_weight).to(device).float()
+                model, best_val_loss = fit_CVAE(
+                    model, lr, patience, train_loader, val_loader, train_size,
+                    outdir, model_file, device, epochs,
+                    dis=dis, discriminator_weight=discriminator_weight)
+                print("Best validation loss:", best_val_loss)
+
+            model.load_state_dict(torch.load(str(outdir) + '/' + model_file,
+                                            map_location=device))
+            model.eval()
+            full_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                                    collate_fn=collate_dense)
+            all_mu = []
+            with torch.no_grad():
+                for batch in full_loader:
+                    x    = batch["x"].to(device).float()
+                    cond = batch["cond"].to(device).float()
+                    sf   = batch["sf"].to(device).float()
+                    out  = model(x, cond, sf)
+                    all_mu.append(out["q_mu"].cpu().numpy())
+
+            latent_means = np.vstack(all_mu)
+            np.save(embeddings_path, latent_means)
+            print("Saved cell_embeddings.npy")
+
         else:
-            print("The model does not exist. Training is being performed!")
-            model = CVAE(n_genes, cond_dim, hidden_size, latent_dim, n_layers,
-                         n_species=n_species,
-                         discriminator_weight=discriminator_weight).to(device).float()
-            model, best_val_loss = fit_CVAE(
-                model, lr, patience, train_loader, val_loader, train_size,
-                outdir, model_file, device, epochs,
-                dis=dis, discriminator_weight=discriminator_weight)
-            print("Best validation loss:", best_val_loss)
+            print('Training was already performed. Loading model and computing UMAP/LISI evaluation!')
+            latent_means = np.load(embeddings_path)
 
-        model.load_state_dict(torch.load(str(outdir) + '/' + model_file,
-                                         map_location=device))
-        model.eval()
-        full_loader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
-                                 collate_fn=collate_dense)
-        all_mu = []
-        with torch.no_grad():
-            for batch in full_loader:
-                x    = batch["x"].to(device).float()
-                cond = batch["cond"].to(device).float()
-                sf   = batch["sf"].to(device).float()
-                out  = model(x, cond, sf)
-                all_mu.append(out["q_mu"].cpu().numpy())
+            dataset, species_cats, _, cond_dim = build_dataset(
+                adata, species_col, batch_col, dis)
+            _, _, data_val, _ = setTrainingSets(dataset, batch_size)
 
-        latent_means = np.vstack(all_mu)
-        np.save(embeddings_path, latent_means)
-        print("Saved cell_embeddings.npy")
-
-    else:
-        print('Training was already performed. Loading model and computing UMAP/LISI evaluation!')
-        latent_means = np.load(embeddings_path)
-
-        dataset, species_cats, _, cond_dim = build_dataset(
-            adata, species_col, batch_col, dis)
-        _, _, data_val, _ = setTrainingSets(dataset, batch_size)
-
-    # ── UMAP ──────────────────────────────────────────────────────────────
-    umap_path = f'{outdir}/umaps/{str(model_name)}_umap.npy'
-    if Path(umap_path).exists():
-        print(f'Skipping UMAP Calculation. {umap_path} already exists.')
-    else:
-        print("Computing UMAP")
         adata.obsm["X_cvae"] = latent_means
-        # Make the UMAPs using scanpy
-        sc.settings.figdir = f'{outdir}/umaps/'
-        sc.settings.file_format_figs = "png"    # change extension globally
-        # First create a UMAP for before CVAE training
-        sc.pp.neighbors(adata, n_neighbors = 10)
-        sc.tl.umap(adata)
-        sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_beforeTraining_species.png')
-        # Second, create a UMAP for after CVAE training
-        sc.pp.neighbors(adata, n_neighbors = 10, use_rep= 'X_cvae')
-        sc.tl.umap(adata)
-        np.save(f'{outdir}/{str(model_name)}_umap.npy', adata.obsm['X_umap'])
-        sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_species.png')
-        sc.pl.umap(adata, color=['batch'], save=f'_{str(model_name)}_batch.png')
-        sc.pl.umap(adata, color=['group'], save=f'_{str(model_name)}_group.png')
-        # plot species individually
-        species_list = adata.obs['species'].unique()
-        n_species = len(species_list)
-        colors = sc.pl.palettes.default_20[:n_species]
-        colors[0], colors[1] = colors[1], colors[0]
-        palette = dict(zip(adata.obs['species'].cat.categories, colors))
-        fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 5))
-        if n_species == 1:
-            axes = [axes]
-        for ax, sp in zip(axes, species_list):
-            sc.pl.umap(
-                adata,
-                color='species',
-                groups=[sp],       # only highlight this species
-                palette=palette,
-                ax=ax,
-                size=1,
-                show=False,
-                title=sp,
-                na_color='white', 
-                legend_loc=None
-            )
-            for collection in ax.collections:
-                collection.set_rasterized(True)
-        plt.tight_layout()
-        fig.savefig(f"{outdir}/umaps/umap_{str(model_name)}_species_sep.png", dpi=300, bbox_inches='tight', transparent=True)
-        fig.savefig(f"{outdir}/umaps/umap_{str(model_name)}_species_sep.pdf", dpi=300, bbox_inches='tight', transparent=True)
 
-    # ── LISI ──────────────────────────────────────────────────────────────
-    print("Computing LISI")
-    idx        = data_val.indices
-    val_subset = adata[idx].copy()
-    X_val      = np.asarray(val_subset.obsm["X_cvae"])
-    # Standardize each dimension of embedding
-    X_val      = (X_val - X_val.mean(axis=0)) / (X_val.std(axis=0))
-    val_lisi   = compute_lisi(X_val, val_subset.obs.species.tolist(), perplexity=30)
-    
-    # Add LISI score for hyperparameter settings to the log
-    parsed_params = parse_hyperparameters(hyperparameters)
-    new_row = pd.DataFrame([{**parsed_params, "lisi_score": val_lisi}])
-    lisi_log = Path(outdir).parent / f"LISI_log.txt"
-    if os.path.exists(lisi_log):
-        existing_df = pd.read_csv(lisi_log)
-        hyperparam_cols = [col for col in existing_df.columns if col != "lisi_score"]
-        
-        duplicate_mask = (existing_df[hyperparam_cols] == new_row[hyperparam_cols].values).all(axis=1)
-        
-        if duplicate_mask.any():
-            existing_df.loc[duplicate_mask, "lisi_score"] = val_lisi
-            existing_df.to_csv(lisi_log, mode="w", header=True, index=False)
-            print(f"Updated existing entry in {lisi_log}")
+        # ── UMAP ──────────────────────────────────────────────────────────────
+        umap_path = f'{outdir}/{str(model_name)}_umap.npy'
+        if Path(umap_path).exists():
+            print(f'Skipping UMAP Calculation. {umap_path} already exists.')
         else:
-            new_row.to_csv(lisi_log, mode="a", header=False, index=False)
-            print(f"Appended new entry to {lisi_log}")
-    else:
-        new_row.to_csv(lisi_log, mode="w", header=True, index=False)
-        print(f"Created new log at {lisi_log}")
+            print("Computing UMAP")
+            # Make the UMAPs using scanpy
+            sc.settings.figdir = f'{outdir}/umaps/'
+            sc.settings.file_format_figs = "png"    # change extension globally
+            # First create a UMAP for before CVAE training
+            sc.pp.neighbors(adata, n_neighbors = 10)
+            sc.tl.umap(adata)
+            sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_beforeTraining_species.png')
+            # Second, create a UMAP for after CVAE training
+            sc.pp.neighbors(adata, n_neighbors = 10, use_rep= 'X_cvae')
+            sc.tl.umap(adata)
+            np.save(f'{outdir}/{str(model_name)}_umap.npy', adata.obsm['X_umap'])
+            sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_species.png')
+            sc.pl.umap(adata, color=['batch'], save=f'_{str(model_name)}_batch.png')
+            sc.pl.umap(adata, color=['group'], save=f'_{str(model_name)}_group.png')
+            # plot species individually
+            species_list = adata.obs['species'].unique()
+            n_species = len(species_list)
+            colors = sc.pl.palettes.default_20[:n_species]
+            colors[0], colors[1] = colors[1], colors[0]
+            palette = dict(zip(adata.obs['species'].cat.categories, colors))
+            fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 5))
+            if n_species == 1:
+                axes = [axes]
+            for ax, sp in zip(axes, species_list):
+                sc.pl.umap(
+                    adata,
+                    color='species',
+                    groups=[sp],       # only highlight this species
+                    palette=palette,
+                    ax=ax,
+                    size=1,
+                    show=False,
+                    title=sp,
+                    na_color='white', 
+                    legend_loc=None
+                )
+                for collection in ax.collections:
+                    collection.set_rasterized(True)
+            plt.tight_layout()
+            fig.savefig(f"{outdir}/umaps/umap_{str(model_name)}_species_sep.png", dpi=300, bbox_inches='tight', transparent=True)
+            fig.savefig(f"{outdir}/umaps/umap_{str(model_name)}_species_sep.pdf", dpi=300, bbox_inches='tight', transparent=True)
+
+        # ── LISI ──────────────────────────────────────────────────────────────
+        print("Computing LISI")
+        idx        = data_val.indices
+        val_subset = adata[idx].copy()
+        X_val      = np.asarray(val_subset.obsm["X_cvae"])
+        # Standardize each dimension of embedding
+        X_val      = (X_val - X_val.mean(axis=0)) / (X_val.std(axis=0))
+        val_lisi   = compute_lisi(X_val, val_subset.obs.species.tolist(), perplexity=30)
+        
+        # Add LISI score for hyperparameter settings to the log
+        parsed_params = parse_hyperparameters(hyperparameters)
+        new_row = pd.DataFrame([{**parsed_params, "lisi_score": val_lisi}])
+        lisi_log = Path(outdir).parent / f"LISI_log.txt"
+        if os.path.exists(lisi_log):
+            existing_df = pd.read_csv(lisi_log)
+            hyperparam_cols = [col for col in existing_df.columns if col != "lisi_score"]
+            
+            duplicate_mask = (existing_df[hyperparam_cols] == new_row[hyperparam_cols].values).all(axis=1)
+            
+            if duplicate_mask.any():
+                existing_df.loc[duplicate_mask, "lisi_score"] = val_lisi
+                existing_df.to_csv(lisi_log, mode="w", header=True, index=False)
+                print(f"Updated existing entry in {lisi_log}")
+            else:
+                new_row.to_csv(lisi_log, mode="a", header=False, index=False)
+                print(f"Appended new entry to {lisi_log}")
+        else:
+            new_row.to_csv(lisi_log, mode="w", header=True, index=False)
+            print(f"Created new log at {lisi_log}")
 
     # ── Time-supervised training ───────────────────────────────────────────
     if predict == 'time':
@@ -1098,39 +1017,6 @@ def main(args):
         adata_target.obs.to_csv(out_csv, index=False, sep='\t', float_format="%.4f")
         print(f'  Saved predictions -> {out_csv}')
 
-    if predict == 'px_decoder':
-        latent_means = np.load(embeddings_path)
-        adata.obsm["X_cvae"] = latent_means
-
-        dataset, species_cats, species_idx, cond_dim = build_dataset(
-            adata, species_col, batch_col, dis)
-        n_cells, n_genes = adata.X.shape
-        n_species = len(species_cats) if dis else 0
-
-        model = CVAE(n_genes, cond_dim, hidden_size, latent_dim, n_layers,
-                     n_species=n_species,
-                     discriminator_weight=discriminator_weight).to(device).float()
-        model.load_state_dict(torch.load(str(outdir) + '/' + model_file,
-                                         map_location=device))
-
-        select_species   = [s.strip() for s in args.select_species.split(',')
-                            if s.strip()] or None
-        select_celltypes = [c.strip() for c in args.select_celltypes.split(',')
-                            if c.strip()] or None
-
-        extract_px_decoder(
-            model=model,
-            adata=adata,
-            batch_col=batch_col,
-            species_col=species_col,
-            select_species=select_species,
-            select_celltypes=select_celltypes,
-            celltype_col=args.celltype_col,
-            outdir=outdir,
-            model_name=model_name,
-            batch_size=batch_size,
-            device=device,
-        )
 
 
 if __name__ == "__main__":
@@ -1152,14 +1038,13 @@ if __name__ == "__main__":
     parser.add_argument('--target_species',        type=str,   help='target species',                          default='')
     parser.add_argument('--train_species',         type=str,   help='species to train',                        default='')
     parser.add_argument('--target_time',           type=str,   help='target time',                             default='')
-    parser.add_argument('--group',                 type=str,   help='obs column for group info',               default='major_trajectory')
+    parser.add_argument('--group',                 type=str,   help='obs column for group info',               default='')
     parser.add_argument('--batch_colname',         type=str,   help='column name of obs that correspond to batch information)', default='batch')
     parser.add_argument('--dis',                   type=str,   help='"dis" to use discriminator, "" otherwise', default='')
     parser.add_argument('--discriminator_weight',  type=float, help='weight of discriminator loss in VAE generator step', default=1.0)
-    parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='mouse_age')
+    parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='time')
     parser.add_argument('--celltype_col',     type=str, help='obs column for cell type',                        default='cell_type')
-    parser.add_argument('--select_species',   type=str, help='comma-separated species to extract px_decoder for', default='')
-    parser.add_argument('--select_celltypes', type=str, help='comma-separated cell types to extract px_decoder for', default='')
+
 
     args = parser.parse_args()
 
