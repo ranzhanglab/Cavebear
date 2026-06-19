@@ -1156,7 +1156,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_colname',         type=str,   help='column name of obs that correspond to batch information)', default='batch')
     parser.add_argument('--dis',                   type=str,   help='"dis" to use discriminator, "" otherwise', default='')
     parser.add_argument('--discriminator_weight',  type=float, help='weight of discriminator loss in VAE generator step', default=1.0)
-    parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='mouse_age')
+    parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='time')
     parser.add_argument('--celltype_col',     type=str, help='obs column for cell type',                        default='cell_type')
     parser.add_argument('--select_species',   type=str, help='comma-separated species to extract px_decoder for', default='')
     parser.add_argument('--select_celltypes', type=str, help='comma-separated cell types to extract px_decoder for', default='')
