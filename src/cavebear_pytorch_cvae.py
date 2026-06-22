@@ -23,7 +23,7 @@ from scipy import sparse
 import pandas as pd
 from pathlib import Path
 import sys
-import os,  argparse, json
+import os, argparse, json
 from sklearn.neighbors import NearestNeighbors
 import random
 import math
@@ -710,9 +710,8 @@ def main(args):
     # ── model name ────────────────────────────────────────────────────────
     hyperparameters = f"{str(lr)}_{str(n_layers)}_{str(latent_dim)}" # main hyperparameter settings
     if dis: # add discriminator to hyperparameters if it is used
-        hyperparameters += "_dis"
         if discriminator_weight != 0.0:
-            hyperparameters += f"{discriminator_weight}"   # e.g. _dis2.0
+            hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
     if target_time != '': # add target_time to hyperparameters if it is specified
         hyperparamters += f"_{target_time}"
 

@@ -18,16 +18,12 @@ library(optparse)
 option_list <- list(
   make_option(c("-i", "--input"), type = "character", default = NULL, 
               help = "input .pth file", metavar = "character"),
-  make_option(c("-p", "--params"), type = "character", default = NULL, 
-              help = "string with best params lr_nlayer_ndim", metavar = "character"),
-  make_option(c("-x", "--train_species"), type = "character", default = NULL, 
-              help = "species used for model training", metavar = "character"),
   make_option(c("-y", "--target_species"), type = "character", default = NULL, 
               help = "species used for target pseudotime prediction", metavar = "character"),
   make_option(c("-c", "--cell_type"), type = "character", default = "", 
               help = "column name used for cell type", metavar = "character"),
-  make_option(c("-a", "--age"), type = "character", default = "", 
-              help = "column name used for age/time of target species", metavar = "character")
+  make_option(c("-t", "--time"), type = "character", default = "time_label", 
+              help = "column name used for time of target species", metavar = "character")
 )
 
 # Parse the incoming command line parameters
@@ -39,45 +35,18 @@ if (is.null(opt$input)){
   print_help(opt_parser)
   stop("Missing mandatory argument: --input", call. = FALSE)
 }
-if (is.null(opt$params)){
-  print_help(opt_parser)
-  stop("Missing mandatory argument: --params", call. = FALSE)
-}
-if (is.null(opt$train_species)){
-  print_help(opt_parser)
-  stop("Missing mandatory argument: --train_species", call. = FALSE)
-}
 if (is.null(opt$target_species)){
   print_help(opt_parser)
   stop("Missing mandatory argument: --target_species", call. = FALSE)
 }
 
 input           <- opt$input
-params          <- opt$params
-train_species   <- opt$train_species
 target_species  <- opt$target_species
 cell_type       <- opt$cell_type
-age             <- opt$age
+time             <- opt$time
 
 
 # ----------------- Functions -----------------
-## load the prediction file
-load_existing_prediction <- function(prefix, suffix){
-  time_pred_cavebear_best <- c()
-  for (learning_rate in c('0.1','0.01', '0.001', '0.0001')){
-    for (embed_dim in c(50, 100, 200, 400, 800)){
-      for (nlayer in c(2,3,4)){
-        bear_filename <- paste0(prefix, learning_rate, '_', nlayer, '_', embed_dim, suffix)
-        if (file.exists(bear_filename)){
-          print(bear_filename)
-          time_pred_cavebear_best <- fread(bear_filename)
-        }
-      }
-    }
-  }
-  return(time_pred_cavebear_best)
-}
-
 ## calculate AUROC between any pair of time points, summarized by time gap
 calc_pairwise_auroc <- function(input_rank, input_pred){
   # input_rank: rank of time labels (held out in target species)
@@ -107,8 +76,8 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
   auc_mat <- c()
   for (celltype_i in celltype_large){
     time_pred_celltypei <- time_pred_cavebear[cell_type==celltype_i]
-    time_pred_celltypei <- time_pred_celltypei[!is.na(age)]
-    time_pred_celltypei$timerank <- dense_rank(time_pred_celltypei$age)
+    time_pred_celltypei <- time_pred_celltypei[!is.na(time)]
+    time_pred_celltypei$timerank <- dense_rank(time_pred_celltypei$time)
     
     ## calculate pair-wise AUROC on each cell type. try different cell type level to test the robustness of Cavebear
     for (celltype_sub_cate in c(cell_type)){
@@ -133,6 +102,7 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
     geom_errorbar(aes(ymin=precision-se, ymax=precision+se), width=.1) +
     geom_line() +
     geom_point()+
+    scale_y_continuous(limits = c(0, 1)) +
     xlab('Time gap') +
     ylab('Accuracy') +
     geom_hline(yintercept=0.5, linetype="dashed", color = "grey") +
@@ -145,11 +115,14 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
 
 }
 
-calc_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
+compare_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
   print(plot_dir)
   auc_mat <- c()
 
-  time_pred_cavebear$timerank <- dense_rank(time_pred_cavebear$age)
+  time_pred_cavebear$timerank <- dense_rank(time_pred_cavebear$time)
+  print(sum(is.na(time_pred_cavebear$timerank)))
+  time_pred_cavebear <- time_pred_cavebear[!is.na(timerank)]
+  print(sum(is.na(time_pred_cavebear$timerank)))
   Cavebear_mat <- calc_pairwise_auroc(time_pred_cavebear$timerank, time_pred_cavebear$Cavebear)
   names(Cavebear_mat) <- c('gap', 'timerank', 'Cavebear')
   auc_mat <- rbind(auc_mat, Cavebear_mat)
@@ -163,6 +136,7 @@ calc_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
     geom_errorbar(aes(ymin=precision-se, ymax=precision+se), width=.1) +
     geom_line() +
     geom_point()+
+    scale_y_continuous(limits = c(0, 1)) +
     xlab('Time gap') +
     ylab('Accuracy') +
     geom_hline(yintercept=0.5, linetype="dashed", color = "grey") +
@@ -180,28 +154,33 @@ calc_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
 ## compare pairwise AUROC, trained and validated across all time points in target species
 ## ==============================================================
 input_dir <- dirname(input)
-name <- sub(pattern = "\\.h5ad$", replacement = "", x = basename(opt$input))
+name <- sub(pattern = "\\.pth$", replacement = "", x = basename(opt$input))
 plot_dir <- paste0(dirname(input),'/eval/')
+print(plot_dir)
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
 
 ## load Cavebear prediction
-prefix <- paste0(input_dir, '/cvae_pytorch_disc_best_model_', name,'_', params, '_')
-suffix <- paste0('_',train_species,'_pred_time',target_species,'.txt')
-time_pred_cavebear <- load_existing_prediction(prefix, suffix)
+bear_filename <- paste0(input_dir, '/', name, '_pred_time_', target_species, '.txt')
+print(bear_filename)
+if (file.exists(bear_filename)){
+  time_pred_cavebear <- fread(bear_filename)
+}
+head(time_pred_cavebear)
 names(time_pred_cavebear)[ncol(time_pred_cavebear)] <- 'Cavebear'
 if (cell_type != "") {
   time_pred_cavebear <- time_pred_cavebear %>% rename("cell_type" := !!sym(cell_type))
-  cell_type <- "cell_type"  # ← add this
+  cell_type <- "cell_type"
 }
-if (age != "") {
-  time_pred_cavebear <- time_pred_cavebear %>% rename("age" := !!sym(age))
-  age <- "age"  # ← add this
+if (time != "") {
+  time_pred_cavebear <- time_pred_cavebear %>% rename("time" := !!sym(time))
+  time <- "time"
 }
 setDT(time_pred_cavebear)
 
 if (cell_type != "") {
   celltype_large <- names(table(time_pred_cavebear$cell_type))[table(time_pred_cavebear$cell_type)>10000] 
   compare_pairwise_auroc_celltype(celltype_large, time_pred_cavebear, plot_dir)
+  compare_pairwise_auroc_species(time_pred_cavebear, plot_dir)
 } else {
   compare_pairwise_auroc_species(time_pred_cavebear, plot_dir)
 }
