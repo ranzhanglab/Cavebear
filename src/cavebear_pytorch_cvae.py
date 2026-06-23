@@ -662,6 +662,7 @@ def parse_hyperparameters(hyperparam_str):
         "n_layers": int(parts[1]),
         "latent_dim": int(parts[2]),
         "dis": 0.0,  # default if not present
+        "seed": 101,  # default if not present
     }
 
     remaining = parts[3:]
@@ -669,6 +670,9 @@ def parse_hyperparameters(hyperparam_str):
         if part.startswith("dis"):
             weight_str = part[3:]
             parsed["dis"] = float(weight_str) if weight_str else 0.0
+        elif part.startswith("seed"):
+            seed_str = part[4:]
+            parsed["seed"] = int(seed_str) if seed_str else 101
         else:
             parsed["target_time"] = part
 
