@@ -259,8 +259,8 @@ def collate_dense(batch):
     return out
 
 
-def setTrainingSets(dataset, batch_size):
-    random.seed(101)
+def setTrainingSets(dataset, batch_size, seed):
+    random.seed(seed)
     val_split = 0.1
     val_size   = int(val_split * len(dataset))
     train_size = len(dataset) - val_size
@@ -570,13 +570,13 @@ class TimePredictor:
         return iter_list, train_loss_list, val_loss_list
 
 
-def split_time_trainval(adata, train_species, nsubsample=10000):
+def split_time_trainval(adata, train_species, seed, nsubsample=10000):
     """Split train/val/test cells for temporal prediction."""
     adata_train = adata[(adata.obs.species == train_species) &
                         (adata.obs.time_label == adata.obs.time_label)]
     X_train = adata_train.obsm["X_cvae"]
 
-    random.seed(101)
+    random.seed(seed)
     adata_test_index = random.sample(
         range(adata_train.shape[0]),
         min(int(adata_train.shape[0] * 0.1), nsubsample))
@@ -694,6 +694,7 @@ def main(args):
     dis            = args.dis == 'dis'
     discriminator_weight = args.discriminator_weight
     time_label     = args.time_label
+    seed           = args.seed
 
     ## hyperparameters
     lr        = float(learning_rate)
@@ -702,6 +703,9 @@ def main(args):
     epochs    = my_epochs
 
     torch.set_default_dtype(torch.float32)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
     ## set model parameters
     input_name = str(input_h5ad.split("/")[-1].split(".h5ad")[0])
@@ -714,6 +718,8 @@ def main(args):
             hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
     if target_time != '': # add target_time to hyperparameters if it is specified
         hyperparamters += f"_{target_time}"
+    if seed != 101:
+        hyperparameters += f"_seed{seed}"
 
     model_name = f"cvae_pytorch_disc_best_model_{str(input_name)}_{hyperparameters}"
 
@@ -778,7 +784,7 @@ def main(args):
             print(f"Cells: {n_cells}, Genes: {n_genes}, Cond dim: {cond_dim}")
             print(f"Species: {species_cats} -> n_species for discriminator: {n_species}")
 
-            train_loader, val_loader, data_val, train_size = setTrainingSets(dataset, batch_size)
+            train_loader, val_loader, data_val, train_size = setTrainingSets(dataset, batch_size, seed)
 
             if Path(str(outdir) + '/' + model_file).exists():
                 print("The model already exists. Skipping training!")
@@ -820,7 +826,7 @@ def main(args):
 
             dataset, species_cats, _, cond_dim = build_dataset(
                 adata, species_col, batch_col, dis)
-            _, _, data_val, _ = setTrainingSets(dataset, batch_size)
+            _, _, data_val, _ = setTrainingSets(dataset, batch_size, seed)
 
         adata.obsm["X_cvae"] = latent_means
 
@@ -910,7 +916,7 @@ def main(args):
         (data_train, data_train_label,
          data_val_t,  data_val_label,
          _,   _) = split_time_trainval(
-            adata, train_species, nsubsample=10000)
+            adata, train_species, seed, nsubsample=10000)
 
         print(f'time pred training set shape: {data_train.shape}')
         print(f'time pred validation set shape: {data_val_t.shape}')
@@ -1026,7 +1032,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--input_h5ad',            type=str,   help='input_h5ad')
     parser.add_argument('--learning_rate',         type=float, help='learning_rate',                           default=0.001)
-    parser.add_argument('--predict',               type=str,   help='predict',                                 default='')
+    parser.add_argument('--predict',               type=str,   help='options: train or time',                  default='')
     parser.add_argument('--nlayer',                type=int,   help='nlayer',                                  default=3)
     parser.add_argument('--batch_size',            type=int,   help='batch size',                              default=128)
     parser.add_argument('--my_epochs',             type=int,   help='maximum number of epochs',                default=500)
@@ -1042,8 +1048,8 @@ if __name__ == "__main__":
     parser.add_argument('--dis',                   type=str,   help='"dis" to use discriminator, "" otherwise', default='')
     parser.add_argument('--discriminator_weight',  type=float, help='weight of discriminator loss in VAE generator step', default=1.0)
     parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='time')
-    parser.add_argument('--celltype_col',     type=str, help='obs column for cell type',                        default='cell_type')
-
+    parser.add_argument('--celltype_col',          type=str, help='obs column for cell type',                   default='cell_type')
+    parser.add_argument('--seed',                  type=int, help='random seed',                                default='101')
 
     args = parser.parse_args()
 
