@@ -18,6 +18,8 @@ def get_best_params(lisi_log_path):
     # Convert whole-number params from float to int
     best_params["n_layers"] = int(best_params["n_layers"])
     best_params["latent_dim"] = int(best_params["latent_dim"])
+    best_params["seed"] = int(best_params["seed"])
+
 
     best_params_path = output_dir / "best_params.json"
     with open(best_params_path, "w") as f:

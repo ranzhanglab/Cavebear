@@ -60,7 +60,7 @@ name="${input_base%.*}"
 ## --- 1. train the model ----------------------------------------------------------
 cd ${script_dir}
 for lr in 0.01 0.001 0.0001; do
-    for dis_weight in 0 1 2 5 10; do
+    for dis_weight in 0 1 2 5 10 20; do
         python ${script_dir}/cavebear_pytorch_cvae.py \
         --input_h5ad ${input} \
         --predict train \
@@ -86,6 +86,7 @@ LR=$(jq -r '.lr' $BEST_PARAMS)
 N_LAYERS=$(jq -r '.n_layers' $BEST_PARAMS)
 LATENT_DIM=$(jq -r '.latent_dim' $BEST_PARAMS)
 DIS=$(jq -r '.dis' $BEST_PARAMS) 
+SEED=$(jp -r '.seed' $BEST_PARAMS)
 
 if (( $(echo "$DIS != 0.0" | bc -l) )); then
     DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
@@ -93,6 +94,12 @@ if (( $(echo "$DIS != 0.0" | bc -l) )); then
 else
     DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
     PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis"
+fi
+
+if (( $(echo "$SEED != 101" | bc -l) )); then
+    SEED_ARGS=""
+else
+    SEED_ARGS="--seed ${SEED}"
 fi
 
 python ${script_dir}/cavebear_pytorch_cvae.py \
@@ -104,7 +111,8 @@ python ${script_dir}/cavebear_pytorch_cvae.py \
     --train_species ${train_species} \
     --target_species ${target_species} \
     --time_label ${time_label} \
-    ${DIS_ARGS}
+    ${DIS_ARGS} \
+    ${SEED_ARGS}
 
 
 ## -- 4. Evaluate the time prediction by pairwise accuracy -- option to split by cell_type
@@ -119,7 +127,7 @@ if [ -n "$cell_type" ]; then
         --input ${model_input} \
         --target_species ${target_species} \
         --time ${time_label} \
-        --cell_type ${cell_type}
+        --cell_type ${cell_type}\
 else
         Rscript ${script_dir}/eval_time_pred.R \
         --input ${model_input} \

@@ -510,7 +510,7 @@ class TimePredictor:
             self.restore(self.output_model)
         else:
             loss_val_best = math.inf
-
+            
             train_ds = TensorDataset(
                 torch.as_tensor(data_x,     dtype=torch.float32),
                 torch.as_tensor(label_x,    dtype=torch.float32))
@@ -726,11 +726,6 @@ def main(args):
         hyperparameters += f"_seed{seed}"
 
     model_name = f"cvae_pytorch_disc_best_model_{str(input_name)}_{hyperparameters}"
-
-    if target_species=='human': 
-        model_name = str(model_name) + "_human"
-    if batch_col!='batch':
-        model_name = str(model_name) + "_" + batch_col
     print(f"The model name is: {model_name}")
 
     model_file = str(model_name) + ".pth"
@@ -953,7 +948,7 @@ def main(args):
             mse_list = []
             dic      = {}
             i        = 0
-
+            
             for lr_t in learning_rate_list:
                 for nl in nlayer_list:
                     for ed in embed_dim_list:

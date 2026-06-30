@@ -72,7 +72,6 @@ calc_pairwise_auroc <- function(input_rank, input_pred){
 
 ## compare auroc pairwise by cell_type
 compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, plot_dir){
-  print(plot_dir)
   auc_mat <- c()
   for (celltype_i in celltype_large){
     time_pred_celltypei <- time_pred_cavebear[cell_type==celltype_i]
@@ -116,13 +115,10 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
 }
 
 compare_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
-  print(plot_dir)
   auc_mat <- c()
 
   time_pred_cavebear$timerank <- dense_rank(time_pred_cavebear$time)
-  print(sum(is.na(time_pred_cavebear$timerank)))
   time_pred_cavebear <- time_pred_cavebear[!is.na(timerank)]
-  print(sum(is.na(time_pred_cavebear$timerank)))
   Cavebear_mat <- calc_pairwise_auroc(time_pred_cavebear$timerank, time_pred_cavebear$Cavebear)
   names(Cavebear_mat) <- c('gap', 'timerank', 'Cavebear')
   auc_mat <- rbind(auc_mat, Cavebear_mat)
@@ -165,7 +161,6 @@ print(bear_filename)
 if (file.exists(bear_filename)){
   time_pred_cavebear <- fread(bear_filename)
 }
-head(time_pred_cavebear)
 names(time_pred_cavebear)[ncol(time_pred_cavebear)] <- 'Cavebear'
 if (cell_type != "") {
   time_pred_cavebear <- time_pred_cavebear %>% rename("cell_type" := !!sym(cell_type))
@@ -180,7 +175,6 @@ setDT(time_pred_cavebear)
 if (cell_type != "") {
   celltype_large <- names(table(time_pred_cavebear$cell_type))[table(time_pred_cavebear$cell_type)>10000] 
   compare_pairwise_auroc_celltype(celltype_large, time_pred_cavebear, plot_dir)
-  compare_pairwise_auroc_species(time_pred_cavebear, plot_dir)
 } else {
   compare_pairwise_auroc_species(time_pred_cavebear, plot_dir)
 }
