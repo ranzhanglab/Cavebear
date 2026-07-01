@@ -718,8 +718,7 @@ def main(args):
     # ── model name ────────────────────────────────────────────────────────
     hyperparameters = f"{str(lr)}_{str(n_layers)}_{str(latent_dim)}" # main hyperparameter settings
     if dis: # add discriminator to hyperparameters if it is used
-        if discriminator_weight != 0.0:
-            hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
+        hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
     if target_time != '': # add target_time to hyperparameters if it is specified
         hyperparamters += f"_{target_time}"
     if seed != 101:

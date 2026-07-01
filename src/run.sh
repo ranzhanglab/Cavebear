@@ -88,7 +88,7 @@ if [[ "$use_dis" == "false" ]]; then
     done
 else
     for lr in 0.01 0.001 0.0001; do
-        for dis_weight in 0 1 2 5 10; do
+        for dis_weight in 0 1 2 5 10 20; do
             python ${script_dir}/cavebear_pytorch_cvae.py \
             --input_h5ad ${input} \
             --predict train \
@@ -126,11 +126,7 @@ SEED=$(jq -r '.seed' $BEST_PARAMS)
 # set DIS_ARGS and PARAM_STRING (used in step 4)
 if [[ "$use_dis" == "true" ]]; then
     DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
-    if [[ "$DIS" == "0.0" ]]; then
-        PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis"
-    else
-        PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis${DIS}"
-    fi
+    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis${DIS}"
 else
     DIS_ARGS=""
     PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}"
