@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Usage: Rscript eval_time_pred.R --train_species {STR} --target_species {STR} [OPTIONAL: --cell_type {STR}]
+# Usage: Rscript eval_time_pred.R --input {STR} --target_species {STR} [OPTIONAL: --cell_type {STR} --time {STR}]
 
 # ----------------- load required packages -----------------
 library(data.table)
@@ -105,7 +105,6 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
     xlab('Time gap') +
     ylab('Accuracy') +
     geom_hline(yintercept=0.5, linetype="dashed", color = "grey") +
-    #theme(axis.text.x = element_text(angle = 45, vjust = 0.5))+
     theme(panel.background = element_rect(fill = 'white', colour = 'white'), panel.border = element_rect(colour = "black", fill=NA, size=0.8)) +
     theme(axis.text=element_text(size=10,colour="black"), axis.title=element_text(size=13, colour='black')) +
     theme(axis.text.x = element_text(angle = 75, vjust = 0.5))
@@ -136,7 +135,6 @@ compare_pairwise_auroc_species <- function(time_pred_cavebear, plot_dir){
     xlab('Time gap') +
     ylab('Accuracy') +
     geom_hline(yintercept=0.5, linetype="dashed", color = "grey") +
-    #theme(axis.text.x = element_text(angle = 45, vjust = 0.5))+
     theme(panel.background = element_rect(fill = 'white', colour = 'white'), panel.border = element_rect(colour = "black", fill=NA, size=0.8)) +
     theme(axis.text=element_text(size=10,colour="black"), axis.title=element_text(size=13, colour='black')) +
     theme(axis.text.x = element_text(angle = 75, vjust = 0.5))
