@@ -8,11 +8,12 @@ while [[ $# -gt 0 ]]; do
         --target_species | -y) target_species=$2; shift 2 ;;
         --nlayer | -l) nlayer=$2; shift 2 ;;
         --ndim | -d) ndim=$2; shift 2 ;;
-        --extract | -e) extract=$2; shift 2 ;;
         --cell_type | -e) cell_type=$2; shift 2 ;;
         --time_label | -e) time_label=$2; shift 2 ;;
+        --use_dis | -e) use_dis=$2; shift 2 ;;
+        --seed | -e) seed=$2; shift 2 ;;
         --help   | -h)
-            echo "Usage: $0 --input FILE --train_species STR --target_species STR [--nlayer INT --ndim INT --extract {true or false}]"
+            echo "Usage: $0 --input FILE --train_species STR --target_species STR [--nlayer {INT; default: 3} --ndim {INT; default: 25} --cell_type STR --time_label {STR; default: time} --use_dis {true or false; default: false} --seed {INT; default: 101}]"
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
@@ -21,9 +22,10 @@ done
 # --- Defaults (applied only if flag was not provided) ---
 nlayer=${nlayer:-3}
 ndim=${ndim:-25}
-extract=${extract:-false}
 cell_type=${cell_type:-''}
 time_label=${time_label:-'time'}
+use_dis=${use_dis:-false}
+seed=${seed:-101}
 
 # --- Validate arguments ---
 error=false
@@ -59,17 +61,43 @@ name="${input_base%.*}"
 
 ## --- 1. train the model ----------------------------------------------------------
 cd ${script_dir}
-for lr in 0.01 0.001 0.0001; do
-    python ${script_dir}/cavebear_pytorch_cvae.py \
-    --input_h5ad ${input} \
-    --predict train \
-    --learning_rate ${lr} \
-    --nlayer ${nlayer} \
-    --embed_dim ${ndim} \
-    --train_species ${train_species} \
-    --target_species ${target_species}
-done
 
+# set seed argument if not default
+if (( $(echo "$SEED != 101" | bc -l) )); then
+    SEED_ARGS="--seed ${SEED}"
+else
+    SEED_ARGS=""
+fi
+
+if (( $(echo "use_dis == false" | bc -l) )); then
+    for lr in 0.01 0.001 0.0001; do
+        python ${script_dir}/cavebear_pytorch_cvae.py \
+        --input_h5ad ${input} \
+        --predict train \
+        --learning_rate ${lr} \
+        --nlayer ${nlayer} \
+        --embed_dim ${ndim} \
+        --train_species ${train_species} \
+        --target_species ${target_species} \
+        ${SEED_ARGS}
+    done
+else
+    for lr in 0.01 0.001 0.0001; do
+        for dis_weight in 0 1 2 5 10; do
+            python ${script_dir}/cavebear_pytorch_cvae.py \
+            --input_h5ad ${input} \
+            --predict train \
+            --learning_rate ${lr} \
+            --nlayer ${nlayer} \
+            --embed_dim ${ndim} \
+            --train_species ${train_species} \
+            --target_species ${target_species} \
+            --dis dis \
+            --discriminator_weight ${dis_weight} \
+            ${SEED_ARGS}
+        done
+    done
+fi
 
 ## --- 2. Select the best parameters -- outputs json file with best params (best_params.json) ----------------------------------------------------------
 python ${script_dir}/get_best_params.py --log ${cur_dir}/results/${name}/LISI_log.txt
@@ -81,6 +109,23 @@ BEST_PARAMS=${cur_dir}/results/${name}/best_params.json
 LR=$(jq -r '.lr' $BEST_PARAMS)
 N_LAYERS=$(jq -r '.n_layers' $BEST_PARAMS)
 LATENT_DIM=$(jq -r '.latent_dim' $BEST_PARAMS)
+DIS=$(jq -r '.dis' $BEST_PARAMS) 
+SEED=$(jq -r '.seed' $BEST_PARAMS)
+
+# set DIS_ARGS and PARAM_STRING (used in step 4)
+if (( $(echo "$DIS != 0.0" | bc -l) )); then
+    DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
+    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis${DIS}"
+else
+    DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
+    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis"
+fi
+
+if (( $(echo "$SEED != 101" | bc -l) )); then
+    SEED_ARGS="--seed ${SEED}"
+else
+    SEED_ARGS=""
+fi
 
 python ${script_dir}/cavebear_pytorch_cvae.py \
     --input_h5ad ${input} \
@@ -90,11 +135,12 @@ python ${script_dir}/cavebear_pytorch_cvae.py \
     --embed_dim ${LATENT_DIM} \
     --train_species ${train_species} \
     --target_species ${target_species} \
-    --time_label ${time_label}
+    --time_label ${time_label} \
+    ${DIS_ARGS} \
+    ${SEED_ARGS}
 
 
 ## -- 4. Evaluate the time prediction by pairwise accuracy -- option to split by cell_type
-PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}"
 model_input="${cur_dir}/results/${name}/${PARAM_STRING}/cvae_pytorch_disc_best_model_${name}_${PARAM_STRING}.pth"
 
 if [ -n "$cell_type" ]; then
