@@ -8,10 +8,10 @@ while [[ $# -gt 0 ]]; do
         --target_species | -y) target_species=$2; shift 2 ;;
         --nlayer | -l) nlayer=$2; shift 2 ;;
         --ndim | -d) ndim=$2; shift 2 ;;
-        --cell_type | -e) cell_type=$2; shift 2 ;;
-        --time_label | -e) time_label=$2; shift 2 ;;
-        --use_dis | -e) use_dis=$2; shift 2 ;;
-        --seed | -e) seed=$2; shift 2 ;;
+        --cell_type | -c) cell_type=$2; shift 2 ;;
+        --time_label | -t) time_label=$2; shift 2 ;;
+        --use_dis | -u) use_dis=$2; shift 2 ;;
+        --seed | -s) seed=$2; shift 2 ;;
         --help   | -h)
             echo "Usage: $0 --input FILE --train_species STR --target_species STR [--nlayer {INT; default: 3} --ndim {INT; default: 25} --cell_type STR --time_label {STR; default: time} --use_dis {true or false; default: false} --seed {INT; default: 101}]"
             exit 0 ;;
@@ -32,6 +32,11 @@ error=false
 
 if [[ -z "$input" ]]; then
     echo "Error: --input is required"
+    error=true
+fi
+
+if [[ ! -f "$input" ]]; then
+    echo "Error: input file not found: $input"
     error=true
 fi
 
@@ -63,13 +68,13 @@ name="${input_base%.*}"
 cd ${script_dir}
 
 # set seed argument if not default
-if (( $(echo "$SEED != 101" | bc -l) )); then
-    SEED_ARGS="--seed ${SEED}"
+if [[ "$seed" != "101" ]]; then
+    SEED_ARGS="--seed ${seed}"
 else
     SEED_ARGS=""
 fi
 
-if (( $(echo "use_dis == false" | bc -l) )); then
+if [[ "$use_dis" == "false" ]]; then
     for lr in 0.01 0.001 0.0001; do
         python ${script_dir}/cavebear_pytorch_cvae.py \
         --input_h5ad ${input} \
@@ -106,6 +111,12 @@ python ${script_dir}/get_best_params.py --log ${cur_dir}/results/${name}/LISI_lo
 ## --- 3. Parse the json file to set best parameters and run the time predictor ----------------------------------------------------------
 BEST_PARAMS=${cur_dir}/results/${name}/best_params.json
 
+# check that best_params.json exists
+if [[ ! -f "$BEST_PARAMS" ]]; then
+    echo "Error: best params file not found: $BEST_PARAMS"
+    exit 1
+fi
+
 LR=$(jq -r '.lr' $BEST_PARAMS)
 N_LAYERS=$(jq -r '.n_layers' $BEST_PARAMS)
 LATENT_DIM=$(jq -r '.latent_dim' $BEST_PARAMS)
@@ -113,16 +124,21 @@ DIS=$(jq -r '.dis' $BEST_PARAMS)
 SEED=$(jq -r '.seed' $BEST_PARAMS)
 
 # set DIS_ARGS and PARAM_STRING (used in step 4)
-if (( $(echo "$DIS != 0.0" | bc -l) )); then
+if [[ "$use_dis" == "true" ]]; then
     DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
-    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis${DIS}"
+    if [[ "$DIS" == "0.0" ]]; then
+        PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis"
+    else
+        PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis${DIS}"
+    fi
 else
-    DIS_ARGS="--dis dis --discriminator_weight ${DIS}"
-    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}_dis"
+    DIS_ARGS=""
+    PARAM_STRING="${LR}_${N_LAYERS}_${LATENT_DIM}"
 fi
 
-if (( $(echo "$SEED != 101" | bc -l) )); then
+if [[ "$SEED" != "101" ]]; then
     SEED_ARGS="--seed ${SEED}"
+    PARAM_STRING="${PARAM_STRING}_seed${SEED}"
 else
     SEED_ARGS=""
 fi
@@ -142,6 +158,13 @@ python ${script_dir}/cavebear_pytorch_cvae.py \
 
 ## -- 4. Evaluate the time prediction by pairwise accuracy -- option to split by cell_type
 model_input="${cur_dir}/results/${name}/${PARAM_STRING}/cvae_pytorch_disc_best_model_${name}_${PARAM_STRING}.pth"
+
+# check that model_input exists
+if [[ ! -f "$model_input" ]]; then
+    echo "Error: model_input file not found: $model_input"
+    exit 1
+fi
+
 
 if [ -n "$cell_type" ]; then
     Rscript ${script_dir}/eval_time_pred.R \
