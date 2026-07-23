@@ -573,7 +573,7 @@ class TimePredictor:
 def split_time_trainval(adata, train_species, seed, nsubsample=10000):
     """Split train/val/test cells for temporal prediction."""
     adata_train = adata[(adata.obs.species == train_species) &
-                        (adata.obs.time_label == adata.obs.time_label)]
+                        (adata.obs.time == adata.obs.time)]
     X_train = adata_train.obsm["X_cvae"]
 
     random.seed(seed)
@@ -581,7 +581,7 @@ def split_time_trainval(adata, train_species, seed, nsubsample=10000):
         range(adata_train.shape[0]),
         min(int(adata_train.shape[0] * 0.1), nsubsample))
     data_test       = X_train[adata_test_index, :]
-    data_test_label = adata_train[adata_test_index].obs.time_label
+    data_test_label = adata_train[adata_test_index].obs.time
 
     list_subset = list(set(range(adata_train.shape[0])) - set(adata_test_index))
     adata_train = adata_train[list_subset]
@@ -591,11 +591,11 @@ def split_time_trainval(adata, train_species, seed, nsubsample=10000):
         range(adata_train.shape[0]),
         min(int(adata_train.shape[0] * 0.1), nsubsample))
     data_val       = X_train[adata_val_index, :]
-    data_val_label = adata_train[adata_val_index].obs.time_label
+    data_val_label = adata_train[adata_val_index].obs.time
 
     list_subset     = list(set(range(adata_train.shape[0])) - set(adata_val_index))
     data_train      = X_train[list_subset]
-    data_train_label = adata_train[list_subset].obs.time_label
+    data_train_label = adata_train[list_subset].obs.time
 
     return data_train, data_train_label, data_val, data_val_label, data_test, data_test_label
 
@@ -685,8 +685,7 @@ def main(args):
     target_species = args.target_species
     train_species  = args.train_species
     target_time    = args.target_time
-    group          = args.group
-    batch_col      = args.batch_colname
+    batch_col      = args.batch_col
     learning_rate  = args.learning_rate
     embed_dim      = args.embed_dim
     nlayer         = args.nlayer
@@ -697,7 +696,8 @@ def main(args):
     predict        = args.predict
     dis            = args.dis == 'dis'
     discriminator_weight = args.discriminator_weight
-    time_label     = args.time_label
+    time           = args.time
+    cell_type      = args.cell_type
     seed           = args.seed
 
     ## hyperparameters
@@ -720,7 +720,7 @@ def main(args):
     if dis: # add discriminator to hyperparameters if it is used
         hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
     if target_time != '': # add target_time to hyperparameters if it is specified
-        hyperparamters += f"_{target_time}"
+        hyperparameters += f"_{target_time}"
     if seed != 101:
         hyperparameters += f"_seed{seed}"
 
@@ -750,22 +750,21 @@ def main(args):
     print("Loading AnnData:", input_h5ad)
     adata = anndata.read_h5ad(input_h5ad)
     print("AnnData was loaded!")
-    if target_species != 'human':
-        adata = adata[adata.obs['species'] != 'human']
-    else:
-        if 'origin' in adata.obs.columns:
-            adata = adata[(adata.obs['species'] != 'zebrafish') &
-                          (adata.obs['origin']  != 'Disteche')]
-        else:
-            adata = adata[(adata.obs['species'] != 'zebrafish')]
 
+    # Set cell_type and time column names
     adata.obs = adata.obs.copy()
-    adata.obs['group'] = adata.obs[group] if (group != '' and group in adata.obs.columns) else ''
-    adata.obs['time_label'] = adata.obs[time_label] if (time_label != '' and time_label in adata.obs.columns) else ''
+    adata.obs['batch'] = adata.obs[batch_col] if (batch_col != '' and batch_col in adata.obs.columns) else ''
+    adata.obs['cell_type'] = adata.obs[cell_type] if (cell_type != '' and cell_type in adata.obs.columns) else ''
+    if (time != '' and time not in adata.obs.columns):
+        print(f"Error: '--time' value of '{time}' is not a valid input. Must be one of {adata.obs.columns}", file=sys.stderr)
+        sys.exit(1) 
+    else:
+        adata.obs['time'] = adata.obs[time] if (time != '' and time in adata.obs.columns) else ''
 
+    # If you are testing a single target timepoint, filter the adata for that timepoint in the target species
     if target_time != '':
         adata = adata[(adata.obs.species != target_species) |
-                      (adata.obs.time_label == float(target_time))]
+                      (adata.obs.time == float(target_time))]
     print(f'adata shape: {adata.shape}')
 
     embeddings_path = str(outdir) + "/" + model_name + "_cell_embeddings.npy" # set the cell embeddings file name
@@ -837,29 +836,38 @@ def main(args):
             # Make the UMAPs using scanpy
             sc.settings.figdir = f'{outdir}/umaps/'
             sc.settings.file_format_figs = "png"    # change extension globally
-            # First create a UMAP for before CVAE training
-            sc.pp.neighbors(adata, n_neighbors = 10)
-            sc.tl.umap(adata)
-            sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_beforeTraining_species.png')
+            # First subset and normalize the data
+            adata_subset = sc.pp.sample(adata, fraction=0.1, random_state=42, copy=True)
+            sc.pp.normalize_total(adata_subset, target_sum=1e4)
+            sc.pp.log1p(adata_subset)
+            adata_subset.raw = adata_subset
+            # Keep only highly variable genes
+            sc.pp.highly_variable_genes(adata_subset, n_top_genes=2000, batch_key="species")
+            adata_subset = adata_subset[:, adata_subset.var.highly_variable]
+            # compute PCA
+            sc.tl.pca(adata_subset)
+            sc.pp.neighbors(adata_subset, n_neighbors = 20)
+            sc.tl.umap(adata_subset)
+            sc.pl.umap(adata_subset, color=['species'], save=f'_{str(model_name)}_beforeTraining_species.png')
             # Second, create a UMAP for after CVAE training
-            sc.pp.neighbors(adata, n_neighbors = 10, use_rep= 'X_cvae')
-            sc.tl.umap(adata)
-            np.save(f'{outdir}/{str(model_name)}_umap.npy', adata.obsm['X_umap'])
-            sc.pl.umap(adata, color=['species'], save=f'_{str(model_name)}_species.png')
-            sc.pl.umap(adata, color=['batch'], save=f'_{str(model_name)}_batch.png')
-            sc.pl.umap(adata, color=['group'], save=f'_{str(model_name)}_group.png')
+            sc.pp.neighbors(adata_subset, n_neighbors = 20, use_rep= 'X_cvae')
+            sc.tl.umap(adata_subset)
+            np.save(f'{outdir}/{str(model_name)}_umap.npy', adata_subset.obsm['X_umap'])
+            sc.pl.umap(adata_subset, color=['species'], save=f'_{str(model_name)}_species.png')
+            sc.pl.umap(adata_subset, color=['batch'], save=f'_{str(model_name)}_batch.png')
+            sc.pl.umap(adata_subset, color=['cell_type'], save=f'_{str(model_name)}_cell_type.png')
             # plot species individually
-            species_list = adata.obs['species'].unique()
+            species_list = adata_subset.obs['species'].unique()
             n_species = len(species_list)
             colors = sc.pl.palettes.default_20[:n_species]
             colors[0], colors[1] = colors[1], colors[0]
-            palette = dict(zip(adata.obs['species'].cat.categories, colors))
+            palette = dict(zip(adata_subset.obs['species'].cat.categories, colors))
             fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 5))
             if n_species == 1:
                 axes = [axes]
             for ax, sp in zip(axes, species_list):
                 sc.pl.umap(
-                    adata,
+                    adata_subset,
                     color='species',
                     groups=[sp],       # only highlight this species
                     palette=palette,
@@ -1029,25 +1037,24 @@ if __name__ == "__main__":
     print("python", " ".join(sys.argv))
 
     parser.add_argument('--input_h5ad',            type=str,   help='input_h5ad')
-    parser.add_argument('--learning_rate',         type=float, help='learning_rate',                           default=0.001)
-    parser.add_argument('--predict',               type=str,   help='options: train or time',                  default='')
-    parser.add_argument('--nlayer',                type=int,   help='nlayer',                                  default=3)
-    parser.add_argument('--batch_size',            type=int,   help='batch size',                              default=128)
-    parser.add_argument('--my_epochs',             type=int,   help='maximum number of epochs',                default=500)
-    parser.add_argument('--dropout_rate',          type=float, help='dropout_rate',                            default=0.1)
-    parser.add_argument('--embed_dim',             type=int,   help='embed_dim',                               default=25)
-    parser.add_argument('--patience',              type=int,   help='patience',                                default=25)
-    parser.add_argument('--hidden_size',           type=int,   help='hidden_size',                             default=512)
-    parser.add_argument('--target_species',        type=str,   help='target species',                          default='')
-    parser.add_argument('--train_species',         type=str,   help='species to train',                        default='')
-    parser.add_argument('--target_time',           type=str,   help='target time',                             default='')
-    parser.add_argument('--group',                 type=str,   help='obs column for group info',               default='')
-    parser.add_argument('--batch_colname',         type=str,   help='column name of obs that correspond to batch information)', default='batch')
+    parser.add_argument('--learning_rate',         type=float, help='learning_rate',                            default=0.001)
+    parser.add_argument('--predict',               type=str,   help='options: train or time',                   default='')
+    parser.add_argument('--nlayer',                type=int,   help='nlayer',                                   default=3)
+    parser.add_argument('--batch_size',            type=int,   help='batch size',                               default=128)
+    parser.add_argument('--my_epochs',             type=int,   help='maximum number of epochs',                 default=500)
+    parser.add_argument('--dropout_rate',          type=float, help='dropout_rate',                             default=0.1)
+    parser.add_argument('--embed_dim',             type=int,   help='embed_dim',                                default=25)
+    parser.add_argument('--patience',              type=int,   help='patience',                                 default=25)
+    parser.add_argument('--hidden_size',           type=int,   help='hidden_size',                              default=512)
+    parser.add_argument('--target_species',        type=str,   help='target species',                           default='')
+    parser.add_argument('--train_species',         type=str,   help='species to train',                         default='')
+    parser.add_argument('--target_time',           type=str,   help='target time',                              default='')
+    parser.add_argument('--batch_col',             type=str,   help='column name of obs that correspond to batch information)', default='batch')
     parser.add_argument('--dis',                   type=str,   help='"dis" to use discriminator, "" otherwise', default='')
-    parser.add_argument('--discriminator_weight',  type=float, help='weight of discriminator loss in VAE generator step', default=1.0)
-    parser.add_argument('--time_label',            type=str,   help='obs column for time label',                default='time')
-    parser.add_argument('--celltype_col',          type=str, help='obs column for cell type',                   default='cell_type')
-    parser.add_argument('--seed',                  type=int, help='random seed',                                default='101')
+    parser.add_argument('--discriminator_weight',  type=float, help='weight of discriminator loss in VAE generator step',       default=1.0)
+    parser.add_argument('--time',                  type=str,   help='obs column for time label',                 default='time')
+    parser.add_argument('--cell_type',             type=str,   help='obs column for cell type',                  default='')
+    parser.add_argument('--seed',                  type=int,   help='set random seed',                           default='101')
 
     args = parser.parse_args()
 
