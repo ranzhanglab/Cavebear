@@ -6,24 +6,20 @@ while [[ $# -gt 0 ]]; do
         --input | -i) input=$2; shift 2 ;;
         --train_species | -x) train_species=$2; shift 2 ;;
         --target_species | -y) target_species=$2; shift 2 ;;
-        --nlayer | -l) nlayer=$2; shift 2 ;;
-        --ndim | -d) ndim=$2; shift 2 ;;
         --cell_type | -c) cell_type=$2; shift 2 ;;
-        --time_label | -t) time_label=$2; shift 2 ;;
+        --time | -t) time=$2; shift 2 ;;
         --use_dis | -u) use_dis=$2; shift 2 ;;
         --seed | -s) seed=$2; shift 2 ;;
         --help   | -h)
-            echo "Usage: $0 --input FILE --train_species STR --target_species STR [--nlayer {INT; default: 3} --ndim {INT; default: 25} --cell_type STR --time_label {STR; default: time} --use_dis {true or false; default: false} --seed {INT; default: 101}]"
+            echo "Usage: $0 --input FILE --train_species STR --target_species STR --cell_type STR --time {STR; default: time} --use_dis {true or false; default: false} --seed {INT; default: 101}]"
             exit 0 ;;
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
 
 # --- Defaults (applied only if flag was not provided) ---
-nlayer=${nlayer:-3}
-ndim=${ndim:-25}
 cell_type=${cell_type:-''}
-time_label=${time_label:-'time'}
+time=${time:-'time'}
 use_dis=${use_dis:-false}
 seed=${seed:-101}
 
@@ -51,7 +47,7 @@ if [[ -z "$target_species" ]]; then
 fi
 
 if [[ "$error" == true ]]; then
-    echo "Usage: $0 --input FILE --train_species STR --target_species STR [--learning_rate FLOAT --nlayer INT --ndim INT]"
+    echo "Usage: $0 --input FILE --train_species STR --target_species STR --cell_type STR --time {STR; default: time} --use_dis {true or false; default: false} --seed {INT; default: 101}]"
     exit 1
 fi
 
@@ -80,8 +76,6 @@ if [[ "$use_dis" == "false" ]]; then
         --input_h5ad ${input} \
         --predict train \
         --learning_rate ${lr} \
-        --nlayer ${nlayer} \
-        --embed_dim ${ndim} \
         --train_species ${train_species} \
         --target_species ${target_species} \
         ${SEED_ARGS}
@@ -93,8 +87,6 @@ else
             --input_h5ad ${input} \
             --predict train \
             --learning_rate ${lr} \
-            --nlayer ${nlayer} \
-            --embed_dim ${ndim} \
             --train_species ${train_species} \
             --target_species ${target_species} \
             --dis dis \
@@ -143,11 +135,9 @@ python ${script_dir}/cavebear_pytorch_cvae.py \
     --input_h5ad ${input} \
     --predict time \
     --learning_rate ${LR} \
-    --nlayer ${N_LAYERS} \
-    --embed_dim ${LATENT_DIM} \
     --train_species ${train_species} \
     --target_species ${target_species} \
-    --time_label ${time_label} \
+    --time ${time} \
     ${DIS_ARGS} \
     ${SEED_ARGS}
 
@@ -166,12 +156,12 @@ if [ -n "$cell_type" ]; then
     Rscript ${script_dir}/eval_time_pred.R \
         --input ${model_input} \
         --target_species ${target_species} \
-        --time ${time_label} \
+        --time ${time} \
         --cell_type ${cell_type}
 else
         Rscript ${script_dir}/eval_time_pred.R \
         --input ${model_input} \
         --target_species ${target_species} \
-        --time ${time_label}
+        --time ${time}
 fi
 
