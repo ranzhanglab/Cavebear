@@ -92,6 +92,15 @@ compare_pairwise_auroc_celltype <- function(celltype_large, time_pred_cavebear, 
     }
   }
 
+  rank_by_mean <- auc_mat[,
+    .(mean_Cavebear = mean(Cavebear)),
+    by = cell_type
+  ][order(-mean_Cavebear)]
+  
+  # set factors to change order of major trajectories based on rank
+  ordered_levels <- rank_by_mean[order(-mean_Cavebear), cell_type]
+  auc_mat[, cell_type := factor(cell_type, levels = ordered_levels)]
+
   auc_mat_melt <- melt(auc_mat, id.vars = c('gap', 'cell_type', 'celltype_sub_cate'), measure.vars = c('Cavebear'), variable.name = c('method'), value.name = "precision")
   auc_mat_melt$gap <- factor(auc_mat_melt$gap, levels=unique(auc_mat_melt$gap)[order(unique(auc_mat_melt$gap))])
   auc_mat_melt_stat <- summarySE(auc_mat_melt, measurevar="precision", groupvars=c("gap", "method", "cell_type"))
@@ -160,6 +169,7 @@ if (file.exists(bear_filename)){
   time_pred_cavebear <- fread(bear_filename)
 }
 names(time_pred_cavebear)[ncol(time_pred_cavebear)] <- 'Cavebear'
+
 if (cell_type != "") {
   time_pred_cavebear <- time_pred_cavebear %>% rename("cell_type" := !!sym(cell_type))
   cell_type <- "cell_type"

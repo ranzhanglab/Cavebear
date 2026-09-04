@@ -720,7 +720,7 @@ def main(args):
     if dis: # add discriminator to hyperparameters if it is used
         hyperparameters += f"_dis{discriminator_weight}"   # e.g. _dis2.0
     if target_time != '': # add target_time to hyperparameters if it is specified
-        hyperparameters += f"_{target_time}"
+        hyperparameters += f"_target{target_time}"
     if seed != 101:
         hyperparameters += f"_seed{seed}"
 
@@ -751,15 +751,26 @@ def main(args):
     adata = anndata.read_h5ad(input_h5ad)
     print("AnnData was loaded!")
 
-    # Set cell_type and time column names
+    # Set cell_type, batch, and time column names
     adata.obs = adata.obs.copy()
-    adata.obs['batch'] = adata.obs[batch_col] if (batch_col != '' and batch_col in adata.obs.columns) else ''
-    adata.obs['cell_type'] = adata.obs[cell_type] if (cell_type != '' and cell_type in adata.obs.columns) else ''
-    if (time != '' and time not in adata.obs.columns):
-        print(f"Error: '--time' value of '{time}' is not a valid input. Must be one of {adata.obs.columns}", file=sys.stderr)
-        sys.exit(1) 
-    else:
-        adata.obs['time'] = adata.obs[time] if (time != '' and time in adata.obs.columns) else ''
+    if (batch_col != 'batch'):
+        if (batch_col != '' and batch_col not in adata.obs.columns):
+            print(f"Error: '--batch_col' value of '{batch_col}' is not a valid input. Must be one of {adata.obs.columns}", file=sys.stderr)
+            sys.exit(1) 
+        else:
+            adata.obs['batch'] = adata.obs[batch_col] if (batch_col != '' and batch_col in adata.obs.columns) else ''
+    if (cell_type != 'cell_type'):
+        if (cell_type != '' and cell_type not in adata.obs.columns):
+            print(f"Error: '--cell_type' value of '{cell_type}' is not a valid input. Must be one of {adata.obs.columns}", file=sys.stderr)
+            sys.exit(1) 
+        else:
+            adata.obs['cell_type'] = adata.obs[cell_type] if (cell_type != '' and cell_type in adata.obs.columns) else ''
+    if (time != 'time'):
+        if (time != '' and time not in adata.obs.columns):
+            print(f"Error: '--time' value of '{time}' is not a valid input. Must be one of {adata.obs.columns}", file=sys.stderr)
+            sys.exit(1) 
+        else:
+            adata.obs['time'] = adata.obs[time] if (time != '' and time in adata.obs.columns) else ''
 
     # If you are testing a single target timepoint, filter the adata for that timepoint in the target species
     if target_time != '':
@@ -832,12 +843,12 @@ def main(args):
         if Path(umap_path).exists():
             print(f'Skipping UMAP Calculation. {umap_path} already exists.')
         else:
-            print("Computing UMAP")
+            print("Computing UMAP") 
             # Make the UMAPs using scanpy
             sc.settings.figdir = f'{outdir}/umaps/'
             sc.settings.file_format_figs = "png"    # change extension globally
             # First subset and normalize the data
-            adata_subset = sc.pp.sample(adata, fraction=0.1, random_state=42, copy=True)
+            adata_subset = sc.pp.sample(adata, fraction=0.1, rng=42, copy=True)
             sc.pp.normalize_total(adata_subset, target_sum=1e4)
             sc.pp.log1p(adata_subset)
             adata_subset.raw = adata_subset
