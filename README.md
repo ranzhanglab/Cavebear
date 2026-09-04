@@ -1,6 +1,6 @@
 # Cavebear: reference-guided pseudotime inference across species and biological contexts
 
-<img width="2210" height="772" alt="Cavebear_overview_github" src="https://github.com/user-attachments/assets/05f8c333-06b7-4750-98eb-853acab1667d" />  
+<img width="1979" height="988" alt="Cavebear_overview_github" src="https://github.com/user-attachments/assets/7d81cbf9-1f39-45ce-8b3f-23335358b540" />
 
 Overview: Cavebear is a reference-guided framework for predicting cellular pseudotime in undercharacterized datasets using time-series single-cell RNA-seq references from well-characterized systems.
 
@@ -36,13 +36,18 @@ Metadata should be stored in `adata.obs`.
 ### Optional columns
 
 - `cell_type` | this is not used in model training and may only be used in downstream evaluation/plotting
+- `seed` | this can be used to to run model with various seeds (default is 101)
 
 
 ## Example Run:
 ```
 bash ./src/run.sh --input {input.h5ad} --train_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
 ```
-
+### Optional arguments
+- `--cell_type | -c`  : a string that is the column name containing cell type information
+- `--time | -t`  : a string that is the column name containing the collection time of cells in the reference dataset
+- `--use_dis | -u`  : whether or not to train using a discriminator {true or false}; default = false
+- `--seed | -s`  : an integer to use as the seed; default = 101
 
 ## Basic Usage:
 ### 1. Cross-species alignment
@@ -72,12 +77,12 @@ python ./src/get_best_params.py --log /path/to/LISI_log.txt
 ### 3. Psuedotime training on reference cells and prediction on target cells
 Use the 'best_params.json' file to get pseudotime prediction.
 ```
-python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time_label mouse_age
+python ./src/cavebear_pytorch_cvae.py --input_h5ad ./data/example.h5ad --predict predict --train_species mouse --target_species zebrafish --time mouse_age
 ```
-Where  `time_label` is the name of the column containing the training species time data (ie mouse age when cells were collected).
+Where  `time` is the name of the column containing the training species time data (ie mouse age when cells were collected).
 
 Output:
-A .txt file with the model name and best hyperparameters for both trainings is created for the target cells by saving the adata.obs where the last column is called "pred_time" and contains the predicted pseudotime.
+A .txt file with the model name and best hyperparameters for both trainings is created for the target cells by saving the adata.obs where the last column is called 'pred_time' and contains the predicted pseudotime.
 ```
 sampleID        age  batch  genotype  major_trajectory  origin  species  pred_time
 GAP13.48.P9_G1	48.0000  0  XX      retinal neuron    Trapnell	zebrafish	  14.4456
