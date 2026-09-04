@@ -43,7 +43,11 @@ Metadata should be stored in `adata.obs`.
 ```
 bash ./src/run.sh --input {input.h5ad} --train_species {species1} --target_species {species2} [OPTIONAL ARGUMENTS]
 ```
-
+### Optional arguments
+- `--cell_type | -c`  : a string that is the column name containing cell type information
+- `--time | -t`  : a string that is the column name containing the collection time of cells in the reference dataset
+- `--use_dis | -u`  : whether or not to train using a discriminator {true or false}; default = false
+- `--seed | -s`  : an integer to use as the seed; default = 101
 
 ## Basic Usage:
 ### 1. Cross-species alignment
